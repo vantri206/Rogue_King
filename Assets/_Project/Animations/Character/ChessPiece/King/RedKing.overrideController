@@ -1,0 +1,15 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!221 &22100000
+AnimatorOverrideController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: RedKing
+  m_Controller: {fileID: 9100000, guid: 23fd69bd7f7bc654b8b604681429a2a2, type: 2}
+  m_Clips:
+  - m_OriginalClip: {fileID: 7400000, guid: 7ee9a7b57e0aa7e479a5f1b9258f07ef, type: 2}
+    m_OverrideClip: {fileID: 7400000, guid: ab0cf84caa5b0774580b32408624f2bc, type: 2}
+  - m_OriginalClip: {fileID: 7400000, guid: c70ca135c74a84e4681b5b8980d9d431, type: 2}
+    m_OverrideClip: {fileID: 7400000, guid: 8d1c77673f0c6c5409b5c2b8c2b81f1b, type: 2}
