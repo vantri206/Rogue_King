@@ -216,12 +216,12 @@ TextureImporter:
       name: UiSheet_0
       rect:
         serializedVersion: 2
-        x: 20
-        y: 159
-        width: 8
-        height: 21
+        x: 0
+        y: 176
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -238,12 +238,12 @@ TextureImporter:
       name: UiSheet_1
       rect:
         serializedVersion: 2
-        x: 68
-        y: 159
-        width: 8
-        height: 21
+        x: 48
+        y: 176
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -260,12 +260,12 @@ TextureImporter:
       name: UiSheet_2
       rect:
         serializedVersion: 2
-        x: 116
-        y: 159
-        width: 8
-        height: 21
+        x: 96
+        y: 176
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -282,12 +282,12 @@ TextureImporter:
       name: UiSheet_3
       rect:
         serializedVersion: 2
-        x: 4
-        y: 143
-        width: 40
-        height: 8
+        x: 0
+        y: 160
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -304,12 +304,12 @@ TextureImporter:
       name: UiSheet_4
       rect:
         serializedVersion: 2
-        x: 52
-        y: 143
-        width: 40
-        height: 8
+        x: 48
+        y: 160
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -326,12 +326,12 @@ TextureImporter:
       name: UiSheet_5
       rect:
         serializedVersion: 2
-        x: 100
-        y: 143
-        width: 40
-        height: 8
+        x: 96
+        y: 160
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -348,12 +348,12 @@ TextureImporter:
       name: UiSheet_6
       rect:
         serializedVersion: 2
-        x: 3
-        y: 127
-        width: 42
-        height: 10
+        x: 0
+        y: 144
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -370,12 +370,12 @@ TextureImporter:
       name: UiSheet_7
       rect:
         serializedVersion: 2
-        x: 51
-        y: 127
-        width: 42
-        height: 10
+        x: 48
+        y: 144
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -392,12 +392,12 @@ TextureImporter:
       name: UiSheet_8
       rect:
         serializedVersion: 2
-        x: 99
-        y: 127
-        width: 42
-        height: 10
+        x: 96
+        y: 144
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -414,12 +414,12 @@ TextureImporter:
       name: UiSheet_9
       rect:
         serializedVersion: 2
-        x: 3
-        y: 111
-        width: 42
-        height: 11
+        x: 0
+        y: 128
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -436,12 +436,12 @@ TextureImporter:
       name: UiSheet_10
       rect:
         serializedVersion: 2
-        x: 51
-        y: 111
-        width: 42
-        height: 11
+        x: 48
+        y: 128
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -458,12 +458,12 @@ TextureImporter:
       name: UiSheet_11
       rect:
         serializedVersion: 2
-        x: 99
-        y: 111
-        width: 42
-        height: 11
+        x: 96
+        y: 128
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -480,12 +480,12 @@ TextureImporter:
       name: UiSheet_12
       rect:
         serializedVersion: 2
-        x: 2
-        y: 95
-        width: 44
-        height: 12
+        x: 0
+        y: 112
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -502,12 +502,12 @@ TextureImporter:
       name: UiSheet_13
       rect:
         serializedVersion: 2
-        x: 50
-        y: 95
-        width: 44
-        height: 12
+        x: 48
+        y: 112
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -524,12 +524,12 @@ TextureImporter:
       name: UiSheet_14
       rect:
         serializedVersion: 2
-        x: 98
-        y: 95
-        width: 44
-        height: 12
+        x: 96
+        y: 112
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -546,12 +546,12 @@ TextureImporter:
       name: UiSheet_15
       rect:
         serializedVersion: 2
-        x: 2
-        y: 79
-        width: 44
-        height: 13
+        x: 0
+        y: 96
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -568,12 +568,12 @@ TextureImporter:
       name: UiSheet_16
       rect:
         serializedVersion: 2
-        x: 50
-        y: 79
-        width: 44
-        height: 13
+        x: 48
+        y: 96
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -590,12 +590,12 @@ TextureImporter:
       name: UiSheet_17
       rect:
         serializedVersion: 2
-        x: 98
-        y: 79
-        width: 44
-        height: 13
+        x: 96
+        y: 96
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -612,12 +612,12 @@ TextureImporter:
       name: UiSheet_18
       rect:
         serializedVersion: 2
-        x: 2
-        y: 63
-        width: 44
-        height: 14
+        x: 0
+        y: 80
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -634,12 +634,12 @@ TextureImporter:
       name: UiSheet_19
       rect:
         serializedVersion: 2
-        x: 50
-        y: 63
-        width: 44
-        height: 14
+        x: 48
+        y: 80
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -656,12 +656,12 @@ TextureImporter:
       name: UiSheet_20
       rect:
         serializedVersion: 2
-        x: 98
-        y: 63
-        width: 44
-        height: 14
+        x: 96
+        y: 80
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -678,12 +678,12 @@ TextureImporter:
       name: UiSheet_21
       rect:
         serializedVersion: 2
-        x: 2
-        y: 47
-        width: 44
-        height: 15
+        x: 0
+        y: 64
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -700,12 +700,12 @@ TextureImporter:
       name: UiSheet_22
       rect:
         serializedVersion: 2
-        x: 2
-        y: 31
-        width: 44
+        x: 48
+        y: 64
+        width: 48
         height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -722,12 +722,12 @@ TextureImporter:
       name: UiSheet_23
       rect:
         serializedVersion: 2
-        x: 50
-        y: 47
-        width: 44
-        height: 15
+        x: 96
+        y: 64
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -744,12 +744,12 @@ TextureImporter:
       name: UiSheet_24
       rect:
         serializedVersion: 2
-        x: 50
-        y: 31
-        width: 44
+        x: 0
+        y: 48
+        width: 48
         height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -766,12 +766,12 @@ TextureImporter:
       name: UiSheet_25
       rect:
         serializedVersion: 2
-        x: 98
-        y: 47
-        width: 44
-        height: 15
+        x: 48
+        y: 48
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -788,12 +788,12 @@ TextureImporter:
       name: UiSheet_26
       rect:
         serializedVersion: 2
-        x: 98
-        y: 31
-        width: 44
+        x: 96
+        y: 48
+        width: 48
         height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -810,12 +810,12 @@ TextureImporter:
       name: UiSheet_27
       rect:
         serializedVersion: 2
-        x: 2
-        y: 0
-        width: 44
-        height: 32
+        x: 0
+        y: 32
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -832,12 +832,12 @@ TextureImporter:
       name: UiSheet_28
       rect:
         serializedVersion: 2
-        x: 50
-        y: 0
-        width: 44
-        height: 32
+        x: 48
+        y: 32
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -854,12 +854,12 @@ TextureImporter:
       name: UiSheet_29
       rect:
         serializedVersion: 2
-        x: 98
-        y: 0
-        width: 44
-        height: 32
+        x: 96
+        y: 32
+        width: 48
+        height: 16
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -872,11 +872,143 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: UiSheet_30
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 16
+        width: 48
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 7c56074a3774adf4093018d5f1e8122a
+      internalID: 1982381159
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UiSheet_31
+      rect:
+        serializedVersion: 2
+        x: 48
+        y: 16
+        width: 48
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: b86779420a6209b48bb95e363f25d976
+      internalID: -1515842580
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UiSheet_32
+      rect:
+        serializedVersion: 2
+        x: 96
+        y: 16
+        width: 48
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 6ff0500805fa9fa49b3da5bedc4fa6a9
+      internalID: -917200018
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UiSheet_33
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 48
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 121a74e1dd8062544bd5a059a55e4c99
+      internalID: 679009518
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UiSheet_34
+      rect:
+        serializedVersion: 2
+        x: 48
+        y: 0
+        width: 48
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: c789a2afd89dd5542b0d4578f57de6f4
+      internalID: 1195385900
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UiSheet_35
+      rect:
+        serializedVersion: 2
+        x: 96
+        y: 0
+        width: 48
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: f96f0aaa81fe7b74f83df2e9781539b5
+      internalID: 183201927
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 8db06696513803b4980de62467f4c678
     internalID: 0
     vertices: []
     indices: 
@@ -884,7 +1016,9 @@ TextureImporter:
     weights: []
     secondaryTextures: []
     spriteCustomMetadata:
-      entries: []
+      entries:
+      - key: SpriteEditor.SliceSettings
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":3.0,"y":12.0},"gridSpriteSize":{"x":48.0,"y":16.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":2,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
       UiSheet_0: -574016243760577486
       UiSheet_1: -6451627897426487033
@@ -910,6 +1044,12 @@ TextureImporter:
       UiSheet_28: -3123222090371692044
       UiSheet_29: -198471748151065246
       UiSheet_3: 8308788527827120823
+      UiSheet_30: 1982381159
+      UiSheet_31: -1515842580
+      UiSheet_32: -917200018
+      UiSheet_33: 679009518
+      UiSheet_34: 1195385900
+      UiSheet_35: 183201927
       UiSheet_4: 6566321659400802800
       UiSheet_5: 852779092767270936
       UiSheet_6: 8017430728254274535

@@ -19,10 +19,15 @@ public class ChessBoard : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private float tileSize = 1f;
     [SerializeField] private Vector3 piecePlacementOffset = new Vector3(0f, 0.4f, 0f);
+
+    public BoardData boardData { get; private set; }
+
     private BoardTile[,] grid;
 
-    public int BoardWidth { get; private set; }
-    public int BoardHeight { get; private set; }
+    public Vector3 PiecePlacementOffset => piecePlacementOffset;
+
+    public int boardWidth { get; private set; }
+    public int boardHeight { get; private set; }
 
     private void Start()
     {
@@ -57,17 +62,18 @@ public class ChessBoard : MonoBehaviour
     {
         if (currentLevelData == null || tilePrefab == null || interactableTilesContainer == null) return;
 
-        BoardWidth = currentLevelData.boardWidth;
-        BoardHeight = currentLevelData.boardHeight;
-        grid = new BoardTile[BoardWidth, BoardHeight];
+        boardWidth = currentLevelData.boardWidth;
+        boardHeight = currentLevelData.boardHeight;
+        grid = new BoardTile[boardWidth, boardHeight];
 
-        for (int x = 0; x < BoardWidth; x++)
+        var existenceList = currentLevelData.tileExistenceMap != null ? currentLevelData.tileExistenceMap.ToList() : null;
+        boardData = new BoardData(boardWidth, boardHeight, existenceList);
+
+        for (int x = 0; x < boardWidth; x++)
         {
-            for (int y = 0; y < BoardHeight; y++)
+            for (int y = 0; y < boardHeight; y++)
             {
-                int index = y * BoardWidth + x;
-
-                if (currentLevelData.tileExistenceMap != null && index < currentLevelData.tileExistenceMap.Count() && currentLevelData.tileExistenceMap[index] == true)
+                if (boardData.IsValidPosition(x, y))
                 {
                     Vector3 localPos = new Vector3(x * tileSize, -y * tileSize, 0f);
                     
@@ -87,15 +93,15 @@ public class ChessBoard : MonoBehaviour
 
     public void SpawnPiece(ChessPieceData pieceData, ChessPiece piecePrefab, Vector2Int startPos, ChessFaction faction)
     {
-        if (startPos.x < 0 || startPos.x >= BoardWidth || startPos.y < 0 || startPos.y >= BoardHeight)
+        if (boardData == null || !boardData.IsValidPosition(startPos.x, startPos.y))
         {
-            Debug.LogError("Spawn position out of bounds!");
+            Debug.LogError("Spawn position out of bounds or tile is invalid!");
             return;
         }
 
-        if (grid[startPos.x, startPos.y] == null)
+        if (!boardData.IsTileEmpty(startPos.x, startPos.y))
         {
-            Debug.LogError($"Cannot spawn at {startPos} because there is no tile here!");
+            Debug.LogError($"Cannot spawn at {startPos} because a piece is already here!");
             return;
         }
 
@@ -103,17 +109,19 @@ public class ChessBoard : MonoBehaviour
         Vector3 worldPos = tilePos + piecePlacementOffset;
 
         ChessPiece newPiece = Instantiate(piecePrefab, worldPos, Quaternion.identity, entitiesContainer);
-
         ChessPieceRuntime newRuntime = new ChessPieceRuntime(pieceData, startPos, faction);
-
+        
         newPiece.Initialize(newRuntime);
         grid[startPos.x, startPos.y].SetPiece(newPiece);
+
+        boardData.SetPiece(startPos.x, startPos.y, newRuntime);
     }
 
     public BoardTile GetTileAt(Vector2Int pos)
     {
         if (grid == null) return null;
-        if (pos.x >= 0 && pos.x < BoardWidth && pos.y >= 0 && pos.y < BoardHeight)
+
+        if (boardData != null && boardData.IsValidPosition(pos.x, pos.y))
         {
             return grid[pos.x, pos.y];
         }
@@ -122,42 +130,9 @@ public class ChessBoard : MonoBehaviour
 
     public List<Vector2Int> GetValidMoves(ChessPieceRuntime pieceRuntime)
     {
-        List<Vector2Int> validMoves = new List<Vector2Int>();
-        if (grid == null) return validMoves;
-
-        Vector2Int currentPos = pieceRuntime.currentGridPosition;
-
-        foreach (Vector2Int dir in pieceRuntime.currentMoveDirections)
-        {
-            for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
-            {
-                Vector2Int checkPos = currentPos + (dir * i);
-                BoardTile tile = GetTileAt(checkPos);
-
-                if (tile == null) break;
-
-                if (tile.currentPiece != null)
-                {
-                    validMoves.Add(checkPos);
-
-                    if (pieceRuntime.currentMoveType == MovementType.Jump)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                validMoves.Add(checkPos);
-            }
-        }
-        return validMoves;
+        if (boardData == null) return new List<Vector2Int>();
+        return boardData.GetValidMoves(pieceRuntime);
     }
-
-    // Context menu
-
 
     [ContextMenu("Generate Board and Pieces")]
     public void GenerateBoardAndPieces()
@@ -190,6 +165,37 @@ public class ChessBoard : MonoBehaviour
         }
 
         grid = null;
+        boardData = null;
     }
 
+    public ChessPieceRuntime GetPieceRuntimeAt(Vector2Int gridPos)
+    {
+        if (boardData != null)
+        {
+            return boardData.GetPieceAt(gridPos.x, gridPos.y);
+        }
+        return null;
+    }
+
+    public void MovePieceOnBoard(Vector2Int start, Vector2Int finish)
+    {
+        if (boardData == null) return;
+
+        BoardTile startTile = GetTileAt(start);
+        BoardTile finishTile = GetTileAt(finish);
+
+        if (startTile == null || finishTile == null) return;
+
+        ChessPiece movingPiece = startTile.currentPiece;
+
+        if (finishTile.currentPiece != null)
+        {
+            Destroy(finishTile.currentPiece.gameObject);
+        }
+
+        startTile.ClearPiece();
+        finishTile.SetPiece(movingPiece);
+
+        boardData.MovePiece(start, finish);
+    }
 }

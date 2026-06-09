@@ -13,11 +13,14 @@ MonoBehaviour:
   m_Name: Pawn
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Pawn
+  baseAttack: 1
   baseHealth: 1
   moveType: 0
   maxMoveRange: 1
   pieceSprite: {fileID: -7156573371003130648, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
   pieceAnimator: {fileID: 22100000, guid: 6e42d0f3dd7dfc84ea2ac6136b790010, type: 2}
-  movePatternGrid: 00000000000000010000000000000000000000000000000000
+  movePatternGrid: 00000000000000000100000000010000000001000000000000
   moveDirections:
-  - {x: 0, y: 1}
+  - {x: 1, y: 1}
+  - {x: 1, y: 0}
+  - {x: 1, y: -1}

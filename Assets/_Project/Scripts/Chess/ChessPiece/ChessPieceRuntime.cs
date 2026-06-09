@@ -14,6 +14,7 @@ public class ChessPieceRuntime
     public ChessFaction chessFaction { get; private set; }
 
     public int currentHealth;
+    public int currentAttack;
     public Vector2Int currentGridPosition;
 
     public int currentMoveRange;
@@ -25,7 +26,9 @@ public class ChessPieceRuntime
         baseData = data;
         currentGridPosition = startPos;
         chessFaction = assignedFaction;
+
         currentHealth = data.baseHealth;
+        currentAttack = data.baseAttack;
 
         currentMoveRange = data.maxMoveRange;
         currentMoveType = data.moveType;

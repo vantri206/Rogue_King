@@ -219,7 +219,7 @@ TextureImporter:
   spriteMeshType: 1
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
-  spritePixelsToUnits: 20
+  spritePixelsToUnits: 16
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
@@ -4473,6 +4473,28 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: TileSprites_190
+      rect:
+        serializedVersion: 2
+        x: 146
+        y: 101
+        width: 12
+        height: 9
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 363ca4980d77ca34bb6c1348667c651e
+      internalID: 1340219510
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -4591,6 +4613,7 @@ TextureImporter:
       TileSprites_188: 768059085
       TileSprites_189: 241264402
       TileSprites_19: -6755561815309083425
+      TileSprites_190: 1340219510
       TileSprites_2: -7830057235797742028
       TileSprites_20: -4136416890600954222
       TileSprites_21: 4666961565534353345

@@ -13,6 +13,7 @@ public class ChessPieceData : ScriptableObject
 {
     [Header("Basic Info")]
     public string pieceName;
+    public int baseAttack = 1;
     public int baseHealth = 1;
 
     [Header("Movement Pattern")]

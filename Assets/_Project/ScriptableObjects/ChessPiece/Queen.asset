@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ecdb75d98e42ec94b984d4f878bd2cdf, type: 3}
   m_Name: Queen
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
-  pieceName: Quen
+  pieceName: Queen
+  baseAttack: 1
   baseHealth: 1
   moveType: 0
   maxMoveRange: 20
