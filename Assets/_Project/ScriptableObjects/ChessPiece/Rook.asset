@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Rook
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Rook
+  baseAttack: 1
   baseHealth: 1
   moveType: 0
   maxMoveRange: 20
@@ -24,3 +25,4 @@ MonoBehaviour:
   - {x: -1, y: 0}
   - {x: 1, y: 0}
   - {x: 0, y: -1}
+  equippedWeapon: {fileID: 11400000, guid: 34d5d0d63be7f4f4daa4a23c6795ffd0, type: 2}

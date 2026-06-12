@@ -5,7 +5,8 @@ public enum TileState
     None,
     ValidMove,
     HoverInvalid,
-    HoverValid
+    HoverValid,
+    AttackTarget // Add this for attack preview
 }
 
 public class BoardTile : MonoBehaviour
@@ -26,6 +27,7 @@ public class BoardTile : MonoBehaviour
     public Color colorValidMove = Color.green;
     public Color colorHoverValid = Color.cyan;
     public Color colorHoverInvalid = Color.red;
+    public Color colorAttackTarget = Color.orange;
 
     private bool isWhiteTile;
 
@@ -87,6 +89,9 @@ public class BoardTile : MonoBehaviour
                 break;
             case TileState.HoverInvalid:
                 highlightRenderer.color = colorHoverInvalid;
+                break;
+            case TileState.AttackTarget:
+                highlightRenderer.color = colorAttackTarget;
                 break;
         }
     }

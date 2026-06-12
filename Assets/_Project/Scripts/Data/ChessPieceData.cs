@@ -8,6 +8,7 @@ public enum MovementType
     Jump    // Can move to specific positions regardless of obstacles
 }
 
+
 [CreateAssetMenu(fileName = "NewChessPiece", menuName = "Chess/Piece Data")]
 public class ChessPieceData : ScriptableObject
 {
@@ -29,4 +30,7 @@ public class ChessPieceData : ScriptableObject
 
     [HideInInspector]
     public List<Vector2Int> moveDirections = new List<Vector2Int>();
+
+    [Header("Combat Settings")]
+    public WeaponData equippedWeapon;
 }

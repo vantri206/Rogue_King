@@ -61,6 +61,15 @@ public class GameManager : SingletonMB<GameManager>
         }
     }
 
+    public void ForceResolveTurn()
+    {
+        if (currentState == GameState.PlayerTurn)
+        {
+            currentState = GameState.ResolvingTurn;
+            OnTurnResolved();
+        }
+    }
+
     public void OnTurnResolved()
     {
         if (currentState == GameState.ResolvingTurn)

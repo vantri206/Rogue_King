@@ -21,6 +21,8 @@ public class ChessPieceRuntime
     public MovementType currentMoveType;
     public List<Vector2Int> currentMoveDirections;
 
+    public WeaponData currentWeapon { get; private set; }
+
     public ChessPieceRuntime(ChessPieceData data, Vector2Int startPos, ChessFaction assignedFaction)
     {
         baseData = data;
@@ -33,5 +35,21 @@ public class ChessPieceRuntime
         currentMoveRange = data.maxMoveRange;
         currentMoveType = data.moveType;
         currentMoveDirections = new List<Vector2Int>(data.moveDirections);
+
+        currentWeapon = data.equippedWeapon;
+        UpdateAttackStat();
+    }
+    public void UpdateAttackStat()
+    {
+        if (currentWeapon == null)
+        {
+            currentAttack = 0;
+            return;
+        }
+
+        if (currentWeapon.attackMechanism == AttackMechanism.GridPattern)
+        {
+            currentAttack = currentWeapon.baseDamage;
+        }
     }
 }

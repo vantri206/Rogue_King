@@ -9,6 +9,7 @@ public class PlayerControl : MonoBehaviour
     [Header("Core References")]
     [SerializeField] private ChessBoard chessBoard;
     [SerializeField] private GameManager gameManager;
+    [SerializeField] private CombatManager combatManager;
     [SerializeField] private ChessControl chessControl;
 
     [Header("UI & Visuals")]
@@ -29,6 +30,11 @@ public class PlayerControl : MonoBehaviour
     private List<Vector2Int> currentValidAttacks = new List<Vector2Int>();
     private bool isAnimating = false;
 
+    private void Awake()
+    {
+        if (gameManager == null) gameManager = GameManager.Instance;
+        if (combatManager == null) combatManager = CombatManager.Instance;
+    }
     private void OnEnable()
     {
         chessControl.onTileClicked += HandleTileClicked;
@@ -88,7 +94,17 @@ public class PlayerControl : MonoBehaviour
                 break;
 
             case PlayerState.AttackTargeting:
-                CancelTargeting();
+                if (currentValidAttacks.Count > 0)
+                {
+                    combatManager.ExecuteAttack(selectedPiece.pieceData, cellPos);
+
+                    CancelTargeting();
+                    if (gameManager != null) gameManager.OnTurnResolved();
+                }
+                else
+                {
+                    CancelTargeting();
+                }
                 break;
         }
     }
@@ -151,12 +167,18 @@ public class PlayerControl : MonoBehaviour
     private void OnAttackButtonClicked()
     {
         if (hoveredPiece == null) return;
+
+        if (hoveredPiece.pieceData.currentWeapon == null)
+        {
+            Debug.LogWarning("This piece has no weapon equipped!");
+            return;
+        }
+
         currentState = PlayerState.AttackTargeting;
         selectedPiece = hoveredPiece;
         pieceContextUI.Hide();
 
-        // currentValidAttacks = chessBoard.boardData.GetValidAttacks(selectedPiece.pieceData);
-        // ShowHighlightTiles(currentValidAttacks, TileState.AttackTarget); 
+        currentValidAttacks.Clear();
     }
 
     private void UpdateMoveVisuals(BoardTile currentTile, Vector2Int currentCell)
@@ -172,7 +194,35 @@ public class PlayerControl : MonoBehaviour
 
     private void UpdateAttackVisuals(BoardTile currentTile, Vector2Int currentCell)
     {
-        UpdateDropShadow(currentTile, currentCell, currentValidAttacks);
+        if (currentTile == null)
+        {
+            ClearHighlightTiles(currentValidAttacks);
+            return;
+        }
+
+        if (lastHoveredTile != currentTile)
+        {
+            ClearHighlightTiles(currentValidAttacks);
+
+            Vector2Int attackerPos = selectedPiece.pieceData.currentGridPosition;
+
+            Vector2 rawDir = (Vector2)(currentCell - attackerPos);
+            Vector2Int targetDir = new Vector2Int(Mathf.RoundToInt(rawDir.normalized.x), Mathf.RoundToInt(rawDir.normalized.y));
+
+            if (targetDir == Vector2Int.zero) targetDir = Vector2Int.up;
+
+            var effectMap = ActionResolver.CalculateEffectMap(
+                selectedPiece.pieceData.currentWeapon,
+                attackerPos,
+                targetDir,
+                chessBoard.boardData
+            );
+
+            currentValidAttacks = new List<Vector2Int>(effectMap.Keys);
+            ShowHighlightTiles(currentValidAttacks, TileState.AttackTarget);
+
+            lastHoveredTile = currentTile;
+        }
     }
 
     private void UpdateDropShadow(BoardTile currentTile, Vector2Int currentCell, List<Vector2Int> validTiles)
