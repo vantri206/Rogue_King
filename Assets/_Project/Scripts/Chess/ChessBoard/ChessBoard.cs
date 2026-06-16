@@ -202,4 +202,20 @@ public class ChessBoard : MonoBehaviour
             boardData.MoveEntity(entity, finish);
         }
     }
+    public void ResetAllTileHighlights()
+    {
+        if (grid == null) return;
+
+        for (int x = 0; x < boardWidth; x++)
+        {
+            for (int y = 0; y < boardHeight; y++)
+            {
+                if (grid[x, y] != null)
+                {
+                    grid[x, y].SetTileState(TileState.None);
+                    grid[x, y].ToggleSelection(false);
+                }
+            }
+        }
+    }
 }

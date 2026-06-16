@@ -181,8 +181,34 @@ public class PlayerControl : MonoBehaviour
         }
         else
         {
-            CancelTargeting();
+            ReturnPieceToOriginalPosition();
         }
+    }
+
+    private void ReturnPieceToOriginalPosition()
+    {
+        if (selectedPiece == null) return;
+
+        ClearHighlightTiles(currentValidMoves);
+        chessBoard.ResetAllTileHighlights();
+
+        currentState = PlayerState.Animating;
+        ClearHighlightTiles(currentValidMoves);
+        currentValidMoves.Clear();
+
+        Vector2Int originalPos = selectedPiece.pieceData.currentGridPosition;
+        BoardTile originalTile = chessBoard.GetTileAt(originalPos);
+        Vector3 originalWorldPos = originalTile.transform.position + chessBoard.PiecePlacementOffset;
+
+        ghostPiece.transform.DOMove(originalWorldPos, ghostSnapDuration).SetEase(Ease.OutQuad).OnComplete(() =>
+        {
+            ghostPiece.Hide();
+            selectedPiece.gameObject.SetActive(true);
+
+            currentState = PlayerState.Idle;
+            selectedPiece = null;
+            Debug.Log("[PlayerControl] Piece returned to origin. Input unlocked.");
+        });
     }
 
     private void UpdateIdleHover(BoardTile currentTile)
@@ -268,6 +294,8 @@ public class PlayerControl : MonoBehaviour
     private void SnapPieceAndMove(Vector2Int targetGridPos)
     {
         ClearHighlightTiles(currentValidMoves);
+        chessBoard.ResetAllTileHighlights();
+
         Vector2Int originalPos = selectedPiece.pieceData.currentGridPosition;
         BoardTile targetTile = chessBoard.GetTileAt(targetGridPos);
 
