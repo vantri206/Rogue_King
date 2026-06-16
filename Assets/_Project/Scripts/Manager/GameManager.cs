@@ -20,7 +20,9 @@ public class GameManager : SingletonMB<GameManager>
     {
         ChangeState(GameState.Setup);
         currentPhase = GamePhase.Phase1;
-        StartGame();
+
+        Invoke(nameof(StartGame), 0.2f);
+        Debug.Log("[GameManager] Initialization delayed. Waiting for all systems to be ready.");
     }
 
     public void StartGame()

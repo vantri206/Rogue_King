@@ -25,6 +25,8 @@ public class PlayerControl : MonoBehaviour
     [SerializeField] private List<WeaponData> equippedWeapons = new List<WeaponData>();
     private int currentWeaponIndex = 0;
 
+    private bool hasMovedThisTurn = false;
+
     private PlayerState currentState = PlayerState.Idle;
     private ChessPiece selectedPiece;
     private BoardTile lastHoveredTile;
@@ -34,6 +36,9 @@ public class PlayerControl : MonoBehaviour
     private List<Vector2Int> currentValidMoves = new List<Vector2Int>();
 
     private List<Vector2Int> currentValidAttacks = new List<Vector2Int>();
+
+    private List<Vector2Int> currentAoETiles = new List<Vector2Int>();
+
     private Vector2Int lockedAttackTarget;
 
     private void Awake()
@@ -45,7 +50,15 @@ public class PlayerControl : MonoBehaviour
     private void Start()
     {
         ghostPiece.Hide();
-        if (pieceContextUI != null) pieceContextUI.Hide(); 
+        if (pieceContextUI != null) pieceContextUI.Hide();
+
+        InitializeWeaponUI();
+        UpdateWeaponUIDisplay();
+
+        if (gameManager != null)
+        {
+            HandleTurnChanged(gameManager.currentTurnFaction);
+        }
     }
 
     private void OnEnable()
@@ -53,10 +66,17 @@ public class PlayerControl : MonoBehaviour
         chessControl.onPointerDown += HandlePointerDown;
         chessControl.onPointerUp += HandlePointerUp;
         chessControl.onCancelTriggered += CancelTargeting;
+
         if (gameManager != null)
         {
             gameManager.OnPieceMoved += HandlePieceMoved;
             gameManager.OnTurnChanged += HandleTurnChanged;
+        }
+
+        if (weaponUI != null)
+        {
+            weaponUI.onActionPressed += OnRogueActionPressed;
+            weaponUI.onWeaponSelected += OnRogueWeaponSelected;
         }
     }
 
@@ -65,10 +85,30 @@ public class PlayerControl : MonoBehaviour
         chessControl.onPointerDown -= HandlePointerDown;
         chessControl.onPointerUp -= HandlePointerUp;
         chessControl.onCancelTriggered -= CancelTargeting;
+
         if (gameManager != null)
         {
             gameManager.OnPieceMoved -= HandlePieceMoved;
             gameManager.OnTurnChanged -= HandleTurnChanged;
+        }
+
+        if (weaponUI != null)
+        {
+            weaponUI.onActionPressed -= OnRogueActionPressed;
+            weaponUI.onWeaponSelected -= OnRogueWeaponSelected;
+        }
+    }
+
+    private void InitializeWeaponUI()
+    {
+        if (weaponUI != null && equippedWeapons != null && equippedWeapons.Count > 0)
+        {
+            weaponUI.SetupWeaponSlots(equippedWeapons);
+            Debug.Log("[PlayerControl] Successfully pushed Weapon Data to UI.");
+        }
+        else
+        {
+            Debug.LogWarning("[PlayerControl] Failed to init Weapon UI. Weapons list is empty or UI is null.");
         }
     }
 
@@ -91,15 +131,41 @@ public class PlayerControl : MonoBehaviour
 
     private void HandlePointerDown(BoardTile clickedTile, Vector2Int cellPos)
     {
-        if (currentState != PlayerState.Idle || clickedTile == null) return;
+        if (clickedTile == null) return;
 
-        ChessPiece targetPiece = clickedTile.currentPiece;
-        if (targetPiece != null && targetPiece.pieceData != null)
+        switch (currentState)
         {
-            if (gameManager.CanPlayerAction(targetPiece.pieceData.faction))
-            {
-                StartDragging(targetPiece);
-            }
+            case PlayerState.Idle:
+                ChessPiece targetPiece = clickedTile.currentPiece;
+                if (targetPiece != null && targetPiece.pieceData != null)
+                {
+                    if (gameManager.CanPlayerAction(targetPiece.pieceData.faction))
+                    {
+                        if (targetPiece.faction == ChessFaction.ChessRogue && hasMovedThisTurn)
+                        {
+                            return;
+                        }
+                        StartDragging(targetPiece);
+                    }
+                }
+                break;
+
+            case PlayerState.Aiming:
+            case PlayerState.ConfirmingAttack:
+                if (currentValidAttacks.Contains(cellPos))
+                {
+                    lockedAttackTarget = cellPos;
+                    currentState = PlayerState.ConfirmingAttack;
+                    UpdateAttackPreviewVisuals();
+
+                    if (weaponUI != null) weaponUI.SetActionMode(true);
+                    Debug.Log($"[PlayerControl] Target locked at {cellPos}. Ready to fire.");
+                }
+                else
+                {
+                    CancelTargeting();
+                }
+                break;
         }
     }
 
@@ -225,40 +291,25 @@ public class PlayerControl : MonoBehaviour
 
     private void CancelTargeting()
     {
-        if (lastHoveredTile != null)
-        {
-            lastHoveredTile.SetTileState(TileState.None);
-            lastHoveredTile.ToggleSelection(false);
-        }
+        ClearHighlightTiles(currentValidMoves);
+        ClearHighlightTiles(currentValidAttacks);
+        ClearHighlightTiles(currentAoETiles);
 
-        if (currentState == PlayerState.DraggingPiece && selectedPiece != null)
-        {
-            currentState = PlayerState.Animating;
-            ClearHighlightTiles(currentValidMoves);
+        currentValidMoves.Clear();
+        currentValidAttacks.Clear();
+        currentAoETiles.Clear();
 
-            Vector2Int originalGridPos = selectedPiece.pieceData.currentGridPosition;
-            BoardTile originalTile = chessBoard.GetTileAt(originalGridPos);
-            Vector3 originalWorldPos = originalTile.transform.position + chessBoard.PiecePlacementOffset;
+        currentState = PlayerState.Idle;
+        lockedAttackTarget = new Vector2Int(-1, -1);
 
-            ghostPiece.transform.DOMove(originalWorldPos, ghostSnapDuration).SetEase(Ease.OutQuad).OnComplete(() =>
-            {
-                ghostPiece.Hide();
-                selectedPiece.gameObject.SetActive(true);
-                currentState = PlayerState.Idle;
-                selectedPiece = null;
-            });
-        }
-        else
-        {
-            currentState = PlayerState.Idle;
-            selectedPiece = null;
-        }
+        if (weaponUI != null) weaponUI.SetActionMode(false);
     }
 
     private void HandlePieceMoved(Vector2Int start, Vector2Int finish)
     {
         BoardTile startTile = chessBoard.GetTileAt(start);
         BoardTile finishTile = chessBoard.GetTileAt(finish);
+
         if (startTile == null || finishTile == null) return;
 
         ChessPiece movingPieceUI = selectedPiece != null ? selectedPiece : startTile.currentPiece;
@@ -285,7 +336,18 @@ public class PlayerControl : MonoBehaviour
             lastHoveredTile = null;
         }
 
-        if (gameManager != null) gameManager.ActionCompleted(true);
+        if (gameManager != null)
+        {
+            if (movingPieceUI.faction == ChessFaction.ChessRogue)
+            {
+                hasMovedThisTurn = true;
+                gameManager.ActionCompleted(true);
+            }
+            else
+            {
+                gameManager.ActionCompleted(true);
+            }
+        }
 
         currentState = PlayerState.Idle;
         selectedPiece = null;
@@ -295,14 +357,6 @@ public class PlayerControl : MonoBehaviour
     {
         if (equippedWeapons == null || equippedWeapons.Count == 0) return null;
         return equippedWeapons[currentWeaponIndex];
-    }
-
-    private void UpdateweaponUIDisplay()
-    {
-        if (weaponUI != null)
-        {
-            weaponUI.SetupWeaponSlots(equippedWeapons, currentWeaponIndex);
-        }
     }
 
     private void OnRogueActionPressed()
@@ -318,15 +372,19 @@ public class PlayerControl : MonoBehaviour
             currentState = PlayerState.Aiming;
 
             currentValidAttacks = ActionResolver.GetTargetingRange(activeWeapon, selectedPiece.pieceData.currentGridPosition, chessBoard.boardData);
-
             ShowHighlightTiles(currentValidAttacks, TileState.HoverValid);
+
             if (weaponUI != null) weaponUI.SetActionMode(false);
+            Debug.Log("[PlayerControl] Entered Aiming State.");
         }
         else if (currentState == PlayerState.ConfirmingAttack)
         {
             if (selectedPiece != null && selectedPiece.pieceData != null)
             {
                 combatManager.ExecuteAttack(selectedPiece.pieceData, GetActiveWeapon(), lockedAttackTarget);
+                hasMovedThisTurn = true;
+                CancelTargeting();
+                gameManager.ActionCompleted(true);
             }
             CancelTargeting();
         }
@@ -348,16 +406,29 @@ public class PlayerControl : MonoBehaviour
     }
     private void UpdateAttackPreviewVisuals()
     {
-        ClearHighlightTiles(currentValidAttacks);
-        ShowHighlightTiles(currentValidAttacks, TileState.HoverValid);
-
-        WeaponData activeWeapon = GetActiveWeapon();
-        var effectMap = ActionResolver.CalculateWeaponGrid(activeWeapon, selectedPiece.pieceData.currentGridPosition, lockedAttackTarget, chessBoard.boardData);
-
-        foreach (var hitPos in effectMap.Keys)
+        foreach (var pos in currentAoETiles)
         {
-            BoardTile tile = chessBoard.GetTileAt(hitPos);
-            if (tile != null) tile.SetTileState(TileState.AttackTarget);
+            BoardTile tile = chessBoard.GetTileAt(pos);
+            if (tile != null)
+            {
+                if (currentValidAttacks.Contains(pos))
+                {
+                    tile.SetTileState(TileState.HoverValid);
+                }
+                else
+                {
+                    tile.SetTileState(TileState.None);
+                }
+            }
+        }
+        currentAoETiles.Clear();
+
+        if (currentState == PlayerState.ConfirmingAttack)
+        {
+            WeaponData activeWeapon = GetActiveWeapon();
+            currentAoETiles = ActionResolver.GetAoE(activeWeapon, selectedPiece.pieceData.currentGridPosition, lockedAttackTarget, chessBoard.boardData);
+
+            ShowHighlightTiles(currentAoETiles, TileState.AttackTarget);
         }
     }
 
@@ -377,27 +448,34 @@ public class PlayerControl : MonoBehaviour
         return null;
     }
 
-    private void HandleTurnChanged(ChessFaction currentTurn)
+    private void HandleTurnChanged(ChessFaction currentTurnFaction)
     {
+        hasMovedThisTurn = false;
+        currentState = PlayerState.Idle;
+        CancelTargeting();
+
+
+        bool isRogueTurn = (currentTurnFaction == ChessFaction.ChessRogue);
+
         if (weaponUI != null)
         {
-            if (currentTurn == ChessFaction.ChessRogue)
+            weaponUI.TogglePanel(isRogueTurn);
+
+            if (isRogueTurn)
             {
-                weaponUI.TogglePanel(true);
-                UpdateWeaponUIDisplay();
-            }
-            else
-            {
-                weaponUI.TogglePanel(false);
+                weaponUI.SetActionMode(false);
             }
         }
+
+        Debug.Log($"[PlayerControl] Turn changed to: {currentTurnFaction}. Weapon UI Active: {isRogueTurn}");
     }
 
     private void UpdateWeaponUIDisplay()
     {
         if (weaponUI != null)
         {
-            weaponUI.SetupWeaponSlots(equippedWeapons, currentWeaponIndex);
+            weaponUI.SetupWeaponSlots(equippedWeapons);
+            weaponUI.UpdateActiveWeaponHighlight(currentWeaponIndex);
         }
     }
 

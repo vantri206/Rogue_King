@@ -79,7 +79,7 @@ public static class ActionResolver
                 float damageMultiplier = weapon.damageFalloff.Evaluate(falloffRatio);
                 int finalDamage = Mathf.RoundToInt(weapon.baseDamage * damageMultiplier);
 
-                if (finalDamage <= 0) continue;
+                if (finalDamage <= 0) finalDamage = 1;
 
                 if (!effectMap.ContainsKey(pos))
                     effectMap[pos] = new List<CombatEffect>();
@@ -88,6 +88,12 @@ public static class ActionResolver
             }
         }
         return effectMap;
+    }
+
+    public static List<Vector2Int> GetAoE(WeaponData weapon, Vector2Int startPos, Vector2Int targetPos, BoardData board)
+    {
+        Dictionary<Vector2Int, List<CombatEffect>> effectMap = CalculateWeaponGrid(weapon, startPos, targetPos, board);
+        return new List<Vector2Int>(effectMap.Keys);
     }
 
     private static Vector2Int RotateOffset(Vector2Int offset, Vector2Int dir)

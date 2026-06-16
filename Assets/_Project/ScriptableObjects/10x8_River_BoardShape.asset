@@ -20,52 +20,52 @@ MonoBehaviour:
   initialPieces:
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 7}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 6}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 5}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 4}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 3}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 2}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 1}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 9347b6c62c6f6da43b946fe39cdad522, type: 2}
     startPosition: {x: 1, y: 0}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 58f48f06078e3934f9b2cffe683fdf48, type: 2}
     startPosition: {x: 0, y: 0}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 58f48f06078e3934f9b2cffe683fdf48, type: 2}
     startPosition: {x: 0, y: 7}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: b9376a99596289d46a7029e93f316d95, type: 2}
     startPosition: {x: 0, y: 1}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: b9376a99596289d46a7029e93f316d95, type: 2}
     startPosition: {x: 0, y: 6}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: 7f79843f820872e4e851fce1c7c5c80d, type: 2}
     startPosition: {x: 0, y: 4}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: da329f572d24db643846a5878219e8e5, type: 2}
     startPosition: {x: 0, y: 3}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: fb73041cf9ea61242b11e43e241209e7, type: 2}
     startPosition: {x: 0, y: 2}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: fb73041cf9ea61242b11e43e241209e7, type: 2}
     startPosition: {x: 0, y: 5}
-    faction: 0
+    faction: 1
   - pieceData: {fileID: 11400000, guid: e15b92e2cb00d1b4b8b4141ae825e9a4, type: 2}
     startPosition: {x: 9, y: 4}
-    faction: 1
+    faction: 0

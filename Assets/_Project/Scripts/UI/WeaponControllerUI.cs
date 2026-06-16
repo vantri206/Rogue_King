@@ -4,20 +4,26 @@ using TMPro;
 using System;
 using System.Collections.Generic;
 
+[System.Serializable]
+public class WeaponSlotUI
+{
+    public Button slotButton;
+    public GameObject weaponOverlay;
+    public TextMeshProUGUI weaponNameText;
+    public Image weaponIcon;
+}
+
 public class WeaponControllerUI : MonoBehaviour
 {
     [Header("Main Panels")]
-    [SerializeField] private GameObject uiPanel;
+    [SerializeField] private GameObject weaponHUD;
 
     [Header("Action Button")]
     [SerializeField] private Button actionButton;
     [SerializeField] private TextMeshProUGUI actionButtonText;
 
-    [Header("Weapon Slots (Max 3)")]
-    [SerializeField] private Button[] weaponButtons;
-    [SerializeField] private GameObject[] weaponHighlights;
-    [SerializeField] private TextMeshProUGUI[] weaponNameTexts;
-    [SerializeField] private Image[] weaponIcons;
+    [Header("Weapon Slots")]
+    [SerializeField] private WeaponSlotUI[] weaponSlots;
 
     public Action onActionPressed;
     public Action<int> onWeaponSelected;
@@ -26,53 +32,59 @@ public class WeaponControllerUI : MonoBehaviour
     {
         if (actionButton != null) actionButton.onClick.AddListener(() => onActionPressed?.Invoke());
 
-        for (int i = 0; i < weaponButtons.Length; i++)
+        for (int i = 0; i < weaponSlots.Length; i++)
         {
             int index = i;
-            if (weaponButtons[i] != null)
+            if (weaponSlots[i].slotButton != null)
             {
-                weaponButtons[i].onClick.AddListener(() => onWeaponSelected?.Invoke(index));
+                weaponSlots[i].slotButton.onClick.AddListener(() => onWeaponSelected?.Invoke(index));
             }
         }
-        TogglePanel(false);
     }
 
     public void TogglePanel(bool active)
     {
-        if (uiPanel != null) uiPanel.SetActive(active);
+        if (weaponHUD != null) weaponHUD.SetActive(active);
     }
-
-    public void SetupWeaponSlots(List<WeaponData> equippedWeapons, int currentIndex)
+    public void SetupWeaponSlots(List<WeaponData> weapons)
     {
-        for (int i = 0; i < weaponButtons.Length; i++)
+        for (int i = 0; i < weaponSlots.Length; i++)
         {
-            if (i < equippedWeapons.Count)
-            {
-                weaponButtons[i].gameObject.SetActive(true);
-                if (weaponNameTexts != null && weaponNameTexts.Length > i && weaponNameTexts[i] != null)
-                    weaponNameTexts[i].text = equippedWeapons[i].weaponName;
-
-                if (weaponIcons != null && weaponIcons.Length > i && weaponIcons[i] != null)
+            if (i < weapons.Count && weapons[i] != null)
+            { 
+                if (weaponSlots[i].slotButton != null)
                 {
-                    weaponIcons[i].sprite = equippedWeapons[i].weaponIcon;
-                    weaponIcons[i].gameObject.SetActive(equippedWeapons[i].weaponIcon != null);
+                    weaponSlots[i].slotButton.gameObject.SetActive(true);
+                }
+
+                if (weaponSlots[i].weaponNameText != null)
+                {
+                    weaponSlots[i].weaponNameText.text = weapons[i].weaponName;
+                }
+
+                if (weaponSlots[i].weaponIcon != null)
+                {
+                    weaponSlots[i].weaponIcon.sprite = weapons[i].weaponIcon;
+                    weaponSlots[i].weaponIcon.enabled = true;
                 }
             }
             else
             {
-                weaponButtons[i].gameObject.SetActive(false);
+                if (weaponSlots[i].slotButton != null)
+                {
+                    weaponSlots[i].slotButton.gameObject.SetActive(false);
+                }
             }
         }
-        UpdateActiveWeaponHighlight(currentIndex);
     }
 
     public void UpdateActiveWeaponHighlight(int activeIndex)
     {
-        for (int i = 0; i < weaponHighlights.Length; i++)
+        for (int i = 0; i < weaponSlots.Length; i++)
         {
-            if (weaponHighlights[i] != null)
+            if (weaponSlots[i].weaponOverlay != null)
             {
-                weaponHighlights[i].SetActive(i == activeIndex);
+                weaponSlots[i].weaponOverlay.SetActive(i != activeIndex);
             }
         }
     }
@@ -84,9 +96,10 @@ public class WeaponControllerUI : MonoBehaviour
             actionButtonText.text = isConfirming ? "FIRE!" : "ATTACK";
         }
 
-        foreach (var btn in weaponButtons)
+        foreach (var slot in weaponSlots)
         {
-            if (btn != null) btn.interactable = !isConfirming;
+            if (slot.slotButton != null)
+                slot.slotButton.interactable = !isConfirming;
         }
     }
 }
