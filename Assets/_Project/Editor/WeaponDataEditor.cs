@@ -1,70 +1,65 @@
 using UnityEngine;
 using UnityEditor;
+using System.Collections.Generic;
 
 [CustomEditor(typeof(WeaponData))]
 public class WeaponDataEditor : Editor
 {
+    private const int GridSize = 15;
+    private const int CenterIndex = GridSize / 2;
+
     public override void OnInspectorGUI()
     {
+        base.OnInspectorGUI();
         WeaponData weapon = (WeaponData)target;
 
-        weapon.weaponName = EditorGUILayout.TextField("Weapon Name", weapon.weaponName);
-        weapon.attackMechanism = (AttackMechanism)EditorGUILayout.EnumPopup("Attack Mechanism", weapon.attackMechanism);
-        weapon.defaultEffectType = (EffectType)EditorGUILayout.EnumPopup("Default Effect", weapon.defaultEffectType);
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("Targeting Pattern (Yellow Range)", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("Center (Cyan) is the King's position.", MessageType.Info);
+        DrawGrid(weapon.targetingPattern, Color.yellow);
 
         EditorGUILayout.Space();
+        EditorGUILayout.LabelField("Effect Pattern (Red AoE)", EditorStyles.boldLabel);
 
-        if (weapon.attackMechanism == AttackMechanism.GridPattern)
-        {
-            EditorGUILayout.LabelField("Grid Pattern Settings", EditorStyles.boldLabel);
-            weapon.baseDamage = EditorGUILayout.IntField("Base Damage", weapon.baseDamage);
+        string helpText = weapon.isOriginRelative
+            ? "Cyan Tile is King."
+            : "Cyan Tile is Target (click).";
 
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Attack Pattern Grid (Facing Up/Forward)", EditorStyles.boldLabel);
+        if (weapon.isDirectional) helpText += "\nAlways draw the weapon's direction UP.";
+        EditorGUILayout.HelpBox(helpText, MessageType.Info);
 
-            int newSize = EditorGUILayout.IntSlider("Grid Size", weapon.patternSize, 3, 15);
-            if (newSize % 2 == 0) newSize++;
-
-            if (newSize != weapon.patternSize || weapon.attackPatternGrid == null || weapon.attackPatternGrid.Length != newSize * newSize)
-            {
-                weapon.patternSize = newSize;
-                weapon.attackPatternGrid = new bool[newSize * newSize];
-            }
-
-            int centerIndex = weapon.patternSize / 2;
-
-            for (int y = 0; y < weapon.patternSize; y++)
-            {
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.FlexibleSpace();
-
-                for (int x = 0; x < weapon.patternSize; x++)
-                {
-                    int index = y * weapon.patternSize + x;
-                    bool isCenter = (x == centerIndex && y == centerIndex);
-
-                    GUI.backgroundColor = isCenter ? Color.yellow : Color.white;
-
-                    if (isCenter)
-                    {
-                        GUILayout.Toggle(true, "X", "Button", GUILayout.Width(25), GUILayout.Height(25));
-                    }
-                    else
-                    {
-                        weapon.attackPatternGrid[index] = GUILayout.Toggle(weapon.attackPatternGrid[index], "", "Button", GUILayout.Width(25), GUILayout.Height(25));
-                    }
-
-                    GUI.backgroundColor = Color.white;
-                }
-
-                GUILayout.FlexibleSpace();
-                EditorGUILayout.EndHorizontal();
-            }
-        }
+        DrawGrid(weapon.effectPattern, Color.red);
 
         if (GUI.changed)
         {
             EditorUtility.SetDirty(weapon);
+        }
+    }
+
+    private void DrawGrid(List<Vector2Int> patternList, Color activeColor)
+    {
+        for (int y = 0; y < GridSize; y++)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            for (int x = 0; x < GridSize; x++)
+            {
+                Vector2Int offset = new Vector2Int(x - CenterIndex, CenterIndex - y);
+                bool isActive = patternList.Contains(offset);
+
+                Color oldColor = GUI.backgroundColor;
+                if (isActive) GUI.backgroundColor = activeColor;
+                else if (offset == Vector2Int.zero) GUI.backgroundColor = Color.cyan;
+
+                if (GUILayout.Button("", GUILayout.Width(20), GUILayout.Height(20)))
+                {
+                    if (isActive) patternList.Remove(offset);
+                    else patternList.Add(offset);
+                }
+                GUI.backgroundColor = oldColor;
+            }
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
         }
     }
 }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 public class BoardData
 {
@@ -7,7 +8,7 @@ public class BoardData
     public int height { get; private set; }
 
     private bool[,] walkableTiles;
-    private ChessPieceRuntime[,] piecesGrid;
+    private List<GridEntity>[,] entitiesGrid;
 
     public BoardData(int width, int height, IReadOnlyList<bool> tileExistenceMap)
     {
@@ -15,7 +16,7 @@ public class BoardData
         this.height = height;
 
         walkableTiles = new bool[width, height];
-        piecesGrid = new ChessPieceRuntime[width, height];
+        entitiesGrid = new List<GridEntity>[width, height];
 
         for (int x = 0; x < width; x++)
         {
@@ -24,6 +25,7 @@ public class BoardData
                 int index = y * width + x;
                 bool exists = tileExistenceMap != null && index < tileExistenceMap.Count ? tileExistenceMap[index] : true;
                 walkableTiles[x, y] = exists;
+                entitiesGrid[x, y] = new List<GridEntity>();
             }
         }
     }
@@ -33,33 +35,49 @@ public class BoardData
         return x >= 0 && x < width && y >= 0 && y < height && walkableTiles[x, y];
     }
 
-    public bool IsTileEmpty(int x, int y)
+    public bool IsTileEmptyForMovement(int x, int y)
     {
-        return IsValidPosition(x, y) && piecesGrid[x, y] == null;
-    }
+        if (!IsValidPosition(x, y)) return false;
 
-    public ChessPieceRuntime GetPieceAt(int x, int y)
-    {
-        if (!IsValidPosition(x, y)) return null;
-        return piecesGrid[x, y];
-    }
-
-    public void SetPiece(int x, int y, ChessPieceRuntime piece)
-    {
-        if (IsValidPosition(x, y))
+        foreach (var entity in entitiesGrid[x, y])
         {
-            piecesGrid[x, y] = piece;
+            if (entity.IsBlockingMovement()) return false;
+        }
+        return true;
+    }
+
+    public void AddEntity(GridEntity entity, int x, int y)
+    {
+        if (IsValidPosition(x, y) && !entitiesGrid[x, y].Contains(entity))
+        {
+            entitiesGrid[x, y].Add(entity);
+            entity.currentGridPosition = new Vector2Int(x, y);
         }
     }
 
-    public void MovePiece(Vector2Int startPos, Vector2Int finishPos)
+    public void RemoveEntity(GridEntity entity)
     {
-        var piece = GetPieceAt(startPos.x, startPos.y);
-        if (piece != null)
+        int x = entity.currentGridPosition.x;
+        int y = entity.currentGridPosition.y;
+
+        if (IsValidPosition(x, y))
         {
-            piecesGrid[startPos.x, startPos.y] = null;
-            SetPiece(finishPos.x, finishPos.y, piece);
-            piece.currentGridPosition = finishPos;
+            entitiesGrid[x, y].Remove(entity);
+        }
+    }
+
+    public T GetEntityAt<T>(int x, int y) where T : GridEntity
+    {
+        if (!IsValidPosition(x, y)) return null;
+        return entitiesGrid[x, y].OfType<T>().FirstOrDefault();
+    }
+
+    public void MoveEntity(GridEntity entity, Vector2Int finishPos)
+    {
+        if (entity != null && IsValidPosition(finishPos.x, finishPos.y))
+        {
+            RemoveEntity(entity);
+            AddEntity(entity, finishPos.x, finishPos.y);
         }
     }
 
@@ -79,11 +97,11 @@ public class BoardData
                 if (!IsValidPosition(checkPos.x, checkPos.y))
                     break;
 
-                ChessPieceRuntime targetPiece = GetPieceAt(checkPos.x, checkPos.y);
+                ChessPieceRuntime targetPiece = GetEntityAt<ChessPieceRuntime>(checkPos.x, checkPos.y);
 
                 if (targetPiece != null)
                 {
-                    if (targetPiece.chessFaction != pieceRuntime.chessFaction)
+                    if (targetPiece.faction != pieceRuntime.faction)
                     {
                         validMoves.Add(checkPos);
                     }
@@ -91,9 +109,13 @@ public class BoardData
                     if (pieceRuntime.currentMoveType == MovementType.Slide)
                         break;
                 }
-                else
+                else if (IsTileEmptyForMovement(checkPos.x, checkPos.y))
                 {
                     validMoves.Add(checkPos);
+                }
+                else
+                {
+                    break;
                 }
             }
         }

@@ -99,9 +99,9 @@ public class ChessBoard : MonoBehaviour
             return;
         }
 
-        if (!boardData.IsTileEmpty(startPos.x, startPos.y))
+        if (!boardData.IsTileEmptyForMovement(startPos.x, startPos.y))
         {
-            Debug.LogError($"Cannot spawn at {startPos} because a piece is already here!");
+            Debug.LogError($"Cannot spawn at {startPos} because tile is blocked!");
             return;
         }
 
@@ -110,11 +110,20 @@ public class ChessBoard : MonoBehaviour
 
         ChessPiece newPiece = Instantiate(piecePrefab, worldPos, Quaternion.identity, entitiesContainer);
         ChessPieceRuntime newRuntime = new ChessPieceRuntime(pieceData, startPos, faction);
-        
+
         newPiece.Initialize(newRuntime);
         grid[startPos.x, startPos.y].SetPiece(newPiece);
 
-        boardData.SetPiece(startPos.x, startPos.y, newRuntime);
+        boardData.AddEntity(newRuntime, startPos.x, startPos.y);
+    }
+
+    public ChessPieceRuntime GetPieceRuntimeAt(Vector2Int gridPos)
+    {
+        if (boardData != null)
+        {
+            return boardData.GetEntityAt<ChessPieceRuntime>(gridPos.x, gridPos.y);
+        }
+        return null;
     }
 
     public BoardTile GetTileAt(Vector2Int pos)
@@ -168,15 +177,6 @@ public class ChessBoard : MonoBehaviour
         boardData = null;
     }
 
-    public ChessPieceRuntime GetPieceRuntimeAt(Vector2Int gridPos)
-    {
-        if (boardData != null)
-        {
-            return boardData.GetPieceAt(gridPos.x, gridPos.y);
-        }
-        return null;
-    }
-
     public void MovePieceOnBoard(Vector2Int start, Vector2Int finish)
     {
         if (boardData == null) return;
@@ -196,6 +196,10 @@ public class ChessBoard : MonoBehaviour
         startTile.ClearPiece();
         finishTile.SetPiece(movingPiece);
 
-        boardData.MovePiece(start, finish);
+        var entity = boardData.GetEntityAt<ChessPieceRuntime>(start.x, start.y);
+        if (entity != null)
+        {
+            boardData.MoveEntity(entity, finish);
+        }
     }
 }

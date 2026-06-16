@@ -5,24 +5,16 @@ public class CombatManager : SingletonMB<CombatManager>
 {
     [Header("Core References")]
     [SerializeField] private ChessBoard chessBoard;
-  
-    public void ExecuteAttack(ChessPieceRuntime attacker, Vector2Int targetPos)
+
+    // Thêm tham số WeaponData vào hàm
+    public void ExecuteAttack(ChessPieceRuntime attacker, WeaponData usedWeapon, Vector2Int lockedTarget)
     {
-        if (attacker == null || attacker.currentWeapon == null)
-        {
-            Debug.LogWarning("[CombatManager] Attacker or Weapon is null!");
-            return;
-        }
+        if (attacker == null || usedWeapon == null) return;
 
-        Vector2 rawDir = (Vector2)(targetPos - attacker.currentGridPosition);
-        Vector2Int targetDir = new Vector2Int(Mathf.RoundToInt(rawDir.normalized.x), Mathf.RoundToInt(rawDir.normalized.y));
-
-        if (targetDir == Vector2Int.zero) targetDir = Vector2Int.right;
-
-        Dictionary<Vector2Int, List<CombatEffect>> effectMap = ActionResolver.CalculateEffectMap(
-            attacker.currentWeapon,
+        Dictionary<Vector2Int, List<CombatEffect>> effectMap = ActionResolver.CalculateWeaponGrid(
+            usedWeapon,
             attacker.currentGridPosition,
-            targetDir,
+            lockedTarget,
             chessBoard.boardData
         );
 
@@ -31,7 +23,7 @@ public class CombatManager : SingletonMB<CombatManager>
             Vector2Int pos = kvp.Key;
             List<CombatEffect> effects = kvp.Value;
 
-            ChessPieceRuntime targetPiece = chessBoard.GetPieceRuntimeAt(pos);
+            ChessPieceRuntime targetPiece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(pos.x, pos.y);
             if (targetPiece != null)
             {
                 foreach (CombatEffect effect in effects)
@@ -42,11 +34,7 @@ public class CombatManager : SingletonMB<CombatManager>
         }
 
         ResolveDeaths();
-
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.ForceResolveTurn();
-        }
+        if (GameManager.Instance != null) GameManager.Instance.ForceResolveTurn();
     }
 
     private void ApplyEffect(ChessPieceRuntime target, CombatEffect effect)
@@ -55,52 +43,55 @@ public class CombatManager : SingletonMB<CombatManager>
         {
             case EffectType.Damage:
                 target.currentHealth -= effect.value;
-                Debug.Log($"[COMBAT MANAGER] {target.baseData.pieceName} taken {effect.value} damage. HP reamaining: {target.currentHealth}");
-
-                // UI Event Or VFX Trigger can be placed here to show damage numbers or hit effects
+                Debug.Log($"[CombatManager] {target.baseData.pieceName} took {effect.value} damage. HP remaining: {target.currentHealth}");
                 break;
 
             case EffectType.Heal:
                 target.currentHealth += effect.value;
-
                 if (target.currentHealth > target.baseData.baseHealth)
                     target.currentHealth = target.baseData.baseHealth;
-                Debug.Log($"[COMBAT MANAGER] {target.baseData.pieceName} healed {effect.value} health.");
-
-                // UI Event Or VFX Trigger can be placed here to show damage numbers or hit effects
-
+                Debug.Log($"[CombatManager] {target.baseData.pieceName} healed {effect.value} HP.");
                 break;
         }
     }
 
     private void ResolveDeaths()
     {
-        List<Vector2Int> deadPiecePositions = new List<Vector2Int>();
+        List<ChessPieceRuntime> deadPieces = new List<ChessPieceRuntime>();
 
         for (int x = 0; x < chessBoard.boardWidth; x++)
         {
             for (int y = 0; y < chessBoard.boardHeight; y++)
             {
-                ChessPieceRuntime piece = chessBoard.boardData.GetPieceAt(x, y);
+                ChessPieceRuntime piece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(x, y);
                 if (piece != null && piece.currentHealth <= 0)
                 {
-                    deadPiecePositions.Add(new Vector2Int(x, y));
+                    deadPieces.Add(piece);
                 }
             }
         }
 
-        foreach (Vector2Int pos in deadPiecePositions)
+        foreach (var deadPiece in deadPieces)
         {
-            ChessPieceRuntime deadPiece = chessBoard.boardData.GetPieceAt(pos.x, pos.y);
-            Debug.Log($"[COMBAT MANAGER] {deadPiece.baseData.pieceName} defeated!");
+            Debug.Log($"[CombatManager] {deadPiece.baseData.pieceName} defeated!");
 
-            chessBoard.boardData.SetPiece(pos.x, pos.y, null);
+            Vector2Int pos = deadPiece.currentGridPosition;
 
+            // Remove from data grid
+            chessBoard.boardData.RemoveEntity(deadPiece);
+
+            // Visual removal
             BoardTile tile = chessBoard.GetTileAt(pos);
             if (tile != null && tile.currentPiece != null)
             {
                 Destroy(tile.currentPiece.gameObject);
                 tile.ClearPiece();
+            }
+
+            // Check win condition based on GDD
+            if (deadPiece.baseData.pieceName.Contains("King"))
+            {
+                GameManager.Instance.OnKingDefeated();
             }
         }
     }

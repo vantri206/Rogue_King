@@ -14,10 +14,10 @@ public class ChessControl : MonoBehaviour
     public Vector2Int hoveredCell { get; private set; } = new Vector2Int(-1, -1);
     public BoardTile hoveredTile { get; private set; }
     public Vector3 mouseWorldPosition { get; private set; }
-
     public bool isHoveringUI { get; private set; }
 
-    public Action<BoardTile, Vector2Int> onTileClicked;
+    public Action<BoardTile, Vector2Int> onPointerDown;
+    public Action<BoardTile, Vector2Int> onPointerUp;
     public Action onCancelTriggered;
 
     private void Awake()
@@ -30,14 +30,18 @@ public class ChessControl : MonoBehaviour
     {
         inputActions.Enable();
         inputActions.Gameplay.PointerPosition.performed += OnPointerPositionChanged;
-        inputActions.Gameplay.PointerClick.started += OnPointerClickStarted;
+
+        inputActions.Gameplay.PointerClick.started += OnPointerDownStarted;
+        inputActions.Gameplay.PointerClick.canceled += OnPointerUpCanceled;
+
         inputActions.Gameplay.Cancel.performed += OnCancelInput;
     }
 
     private void OnDisable()
     {
         inputActions.Gameplay.PointerPosition.performed -= OnPointerPositionChanged;
-        inputActions.Gameplay.PointerClick.started -= OnPointerClickStarted;
+        inputActions.Gameplay.PointerClick.started -= OnPointerDownStarted;
+        inputActions.Gameplay.PointerClick.canceled -= OnPointerUpCanceled;
         inputActions.Gameplay.Cancel.performed -= OnCancelInput;
         inputActions.Disable();
     }
@@ -45,7 +49,6 @@ public class ChessControl : MonoBehaviour
     private void Update()
     {
         isHoveringUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-
         UpdateHoverData();
     }
 
@@ -82,20 +85,19 @@ public class ChessControl : MonoBehaviour
         hoveredCell = new Vector2Int(-1, -1);
     }
 
-    private void OnPointerClickStarted(InputAction.CallbackContext context)
+    private void OnPointerDownStarted(InputAction.CallbackContext context)
     {
         if (isHoveringUI) return;
+        onPointerDown?.Invoke(hoveredTile, hoveredCell);
+    }
 
-        onTileClicked?.Invoke(hoveredTile, hoveredCell);
+    private void OnPointerUpCanceled(InputAction.CallbackContext context)
+    {
+        onPointerUp?.Invoke(hoveredTile, hoveredCell);
     }
 
     private void OnCancelInput(InputAction.CallbackContext context)
     {
         onCancelTriggered?.Invoke();
-    }
-
-    public bool IsPointerOverUI()
-    {
-        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
     }
 }

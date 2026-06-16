@@ -6,7 +6,7 @@ public class ChessPiece : MonoBehaviour
     [SerializeField] private Animator animator;
 
     public ChessPieceRuntime pieceData { get; private set; }
-    public ChessFaction chessFaction { get; private set; }
+    public ChessFaction faction => pieceData != null ? pieceData.faction : ChessFaction.Neutral;
 
     public void Initialize(ChessPieceRuntime data)
     {
@@ -15,6 +15,6 @@ public class ChessPiece : MonoBehaviour
         spriteRenderer.sprite = pieceData.baseData.pieceSprite;
         animator.runtimeAnimatorController = pieceData.baseData.pieceAnimator;
 
-        gameObject.name = $"{pieceData.chessFaction}_{pieceData.baseData.pieceName}";
+        gameObject.name = $"{pieceData.faction}_{pieceData.baseData.pieceName}";
     }
 }

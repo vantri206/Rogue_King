@@ -18,7 +18,7 @@ public class GhostPiece : MonoBehaviour
 
         animator.SetBool(isAirHash, true);
 
-        gameObject.name = $"Ghost_{data.chessFaction}_{data.baseData.pieceName}";
+        gameObject.name = $"Ghost_{data.faction}_{data.baseData.pieceName}";
     }
 
     public void Hide()

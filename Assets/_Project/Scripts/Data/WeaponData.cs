@@ -6,11 +6,18 @@ public class WeaponData : ScriptableObject
 {
     [Header("Basic Settings")]
     public string weaponName;
-    public AttackMechanism attackMechanism;
+    public Sprite weaponIcon;
+    public int baseDamage = 1;
     public EffectType defaultEffectType = EffectType.Damage;
 
-    [Header("Grid Pattern Settings")]
-    [HideInInspector] public int patternSize = 7;
-    [HideInInspector] public bool[] attackPatternGrid = new bool[49];
-    public int baseDamage = 1;
+    [Header("Pattern Settings")]
+    [Tooltip("Check if the damage pattern needs to rotate based on the targeting direction")]
+    public bool isDirectional = false;
+
+    public bool isOriginRelative = false;
+
+    public AnimationCurve damageFalloff = AnimationCurve.Linear(0f, 1f, 1f, 1f);
+
+    [HideInInspector] public List<Vector2Int> targetingPattern = new List<Vector2Int>();
+    [HideInInspector] public List<Vector2Int> effectPattern = new List<Vector2Int>();
 }

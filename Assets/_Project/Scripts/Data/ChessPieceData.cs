@@ -1,13 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using static UnityEngine.UI.ScrollRect;
-
-public enum MovementType
-{
-    Slide,  // Can move in a direction until blocked
-    Jump    // Can move to specific positions regardless of obstacles
-}
-
 
 [CreateAssetMenu(fileName = "NewChessPiece", menuName = "Chess/Piece Data")]
 public class ChessPieceData : ScriptableObject
