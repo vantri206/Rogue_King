@@ -20,4 +20,8 @@ public class WeaponData : ScriptableObject
 
     [HideInInspector] public List<Vector2Int> targetingPattern = new List<Vector2Int>();
     [HideInInspector] public List<Vector2Int> effectPattern = new List<Vector2Int>();
+
+    [Header("VFX")]
+    public GameObject gunPrefab;
+    public GameObject projectilePrefab;
 }

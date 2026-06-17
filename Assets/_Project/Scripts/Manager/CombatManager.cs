@@ -1,12 +1,14 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 public class CombatManager : SingletonMB<CombatManager>
 {
     [Header("Core References")]
     [SerializeField] private ChessBoard chessBoard;
 
-    // Thêm tham số WeaponData vào hàm
+    private int activeProjectiles = 0;
+
     public void ExecuteAttack(ChessPieceRuntime attacker, WeaponData usedWeapon, Vector2Int lockedTarget)
     {
         if (attacker == null || usedWeapon == null) return;
@@ -18,12 +20,25 @@ public class CombatManager : SingletonMB<CombatManager>
             chessBoard.boardData
         );
 
-        foreach (var kvp in effectMap)
-        {
-            Vector2Int pos = kvp.Key;
-            List<CombatEffect> effects = kvp.Value;
+        List<Vector2Int> validTargets = effectMap.Keys.ToList();
+        activeProjectiles = validTargets.Count;
 
-            ChessPieceRuntime targetPiece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(pos.x, pos.y);
+        if (activeProjectiles == 0)
+        {
+            GameManager.Instance.ForceResolveTurn();
+            return;
+        }
+
+        Vector3 startWorldPos = chessBoard.GetTileAt(attacker.currentGridPosition).transform.position + chessBoard.PiecePlacementOffset;
+        CombatVFXManager.Instance.PlayWeaponVFX(usedWeapon, startWorldPos, validTargets, chessBoard,
+            (hitGridPos) => OnProjectileHit(hitGridPos, effectMap)
+        );
+    }
+    private void OnProjectileHit(Vector2Int gridPos, Dictionary<Vector2Int, List<CombatEffect>> effectMap)
+    {
+        if (effectMap.TryGetValue(gridPos, out List<CombatEffect> effects))
+        {
+            ChessPieceRuntime targetPiece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(gridPos.x, gridPos.y);
             if (targetPiece != null)
             {
                 foreach (CombatEffect effect in effects)
@@ -33,8 +48,13 @@ public class CombatManager : SingletonMB<CombatManager>
             }
         }
 
-        ResolveDeaths();
-        if (GameManager.Instance != null) GameManager.Instance.ForceResolveTurn();
+        activeProjectiles--;
+
+        if (activeProjectiles <= 0)
+        {
+            ResolveDeaths();
+            if (GameManager.Instance != null) GameManager.Instance.ForceResolveTurn();
+        }
     }
 
     private void ApplyEffect(ChessPieceRuntime target, CombatEffect effect)
@@ -76,11 +96,8 @@ public class CombatManager : SingletonMB<CombatManager>
             Debug.Log($"[CombatManager] {deadPiece.baseData.pieceName} defeated!");
 
             Vector2Int pos = deadPiece.currentGridPosition;
-
-            // Remove from data grid
             chessBoard.boardData.RemoveEntity(deadPiece);
 
-            // Visual removal
             BoardTile tile = chessBoard.GetTileAt(pos);
             if (tile != null && tile.currentPiece != null)
             {
@@ -88,7 +105,6 @@ public class CombatManager : SingletonMB<CombatManager>
                 tile.ClearPiece();
             }
 
-            // Check win condition based on GDD
             if (deadPiece.baseData.pieceName.Contains("King"))
             {
                 GameManager.Instance.OnKingDefeated();

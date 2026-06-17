@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Shotgun
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: SHOTGUN
-  weaponIcon: {fileID: 6820856509940793013, guid: 64089af12dfc0df4a920f961d1164230, type: 3}
+  weaponIcon: {fileID: 1098179606456428539, guid: 51cbd3b436133f14aa34ed6723f7d569, type: 3}
   baseDamage: 1
   defaultEffectType: 0
   isDirectional: 1
@@ -76,3 +76,5 @@ MonoBehaviour:
   - {x: 1, y: 4}
   - {x: 2, y: 4}
   - {x: 3, y: 4}
+  gunPrefab: {fileID: 8650001892109445979, guid: 6e9c7b975db32944498d27a2bb268ff5, type: 3}
+  projectilePrefab: {fileID: 2534988561544425164, guid: 393dce5b5c7f41349897bd11e084aefe, type: 3}
