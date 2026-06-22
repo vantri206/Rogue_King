@@ -1,14 +1,24 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
-
+public class DeadPieceRecord
+{
+    public ChessPieceData pieceData;
+    public ChessFaction faction;
+    public Vector2Int deathPos;
+}
 public class GameManager : SingletonMB<GameManager>
 {
+    public List<DeadPieceRecord> graveyard = new List<DeadPieceRecord>();
+
     public GameState currentState { get; private set; }
     public GamePhase currentPhase { get; private set; }
     public ChessFaction currentTurnFaction { get; private set; }
 
     public int phase1TurnCount { get; private set; } = 0;
     public int phase2TurnCount { get; private set; } = 0;
+
+    public bool hasUsedPawnShieldThisTurn { get; set; } = false;
 
     [SerializeField] private ChessBoard chessBoard;
 
@@ -53,7 +63,17 @@ public class GameManager : SingletonMB<GameManager>
             Debug.LogWarning("[GameManager] Invalid move requested!");
         }
     }
+    public void RequestSpecialMovePiece(Vector2Int start, Vector2Int finish)
+    {
+        if (currentState != GameState.PlayerTurn) return;
 
+        var movingPiece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(start.x, start.y);
+        if (movingPiece == null) return;
+
+        ChangeState(GameState.ResolvingAction);
+        chessBoard.boardData.MoveEntity(movingPiece, finish);
+        OnPieceMoved?.Invoke(start, finish);
+    }
     public void ActionCompleted(bool consumesTurn)
     {
         if (currentState != GameState.ResolvingAction) return;
@@ -78,11 +98,15 @@ public class GameManager : SingletonMB<GameManager>
 
     private void EndTurn()
     {
+        hasUsedPawnShieldThisTurn = false;
+
         if (currentPhase == GamePhase.Phase1) phase1TurnCount++;
         else phase2TurnCount++;
         currentTurnFaction = currentTurnFaction == ChessFaction.ChessRogue
             ? ChessFaction.ChessAlliance
             : ChessFaction.ChessRogue;
+
+        TickTurnTimers(currentTurnFaction);
 
         ChangeState(GameState.PlayerTurn);
         OnTurnChanged?.Invoke(currentTurnFaction);
@@ -94,7 +118,23 @@ public class GameManager : SingletonMB<GameManager>
         OnStateChanged?.Invoke(currentState);
         Debug.Log($"[GameManager] State changed to -> {newState}");
     }
+    private void TickTurnTimers(ChessFaction nextTurnFaction)
+    {
+        if (chessBoard == null || chessBoard.boardData == null) return;
 
+        for (int x = 0; x < chessBoard.boardWidth; x++)
+        {
+            for (int y = 0; y < chessBoard.boardHeight; y++)
+            {
+                var piece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(x, y);
+                if (piece != null && piece.faction == nextTurnFaction)
+                {
+                    if (piece.currentSkillCooldown > 0) piece.currentSkillCooldown--;
+                    if (piece.silencedTurnsLeft > 0) piece.silencedTurnsLeft--;
+                }
+            }
+        }
+    }
     public bool CanPlayerAction(ChessFaction playerFaction)
     {
         return currentState == GameState.PlayerTurn && currentTurnFaction == playerFaction;

@@ -76,6 +76,11 @@ public class BoardData
     {
         if (entity != null && IsValidPosition(finishPos.x, finishPos.y))
         {
+            if (entity is ChessPieceRuntime runtime)
+            {
+                runtime.previousGridPosition = runtime.currentGridPosition;
+            }
+
             RemoveEntity(entity);
             AddEntity(entity, finishPos.x, finishPos.y);
         }
@@ -88,7 +93,20 @@ public class BoardData
 
         Vector2Int currentPos = pieceRuntime.currentGridPosition;
 
-        foreach (Vector2Int dir in pieceRuntime.currentMoveDirections)
+        // ---> TẠO DANH SÁCH HƯỚNG ĐI LINH HOẠT
+        List<Vector2Int> directionsToCheck = new List<Vector2Int>(pieceRuntime.currentMoveDirections);
+
+        // NẾU CÓ HIỆU ỨNG TỐT ĂN THẲNG: Bổ sung 4 hướng thẳng kịch kim (Trực diện biên)
+        if (pieceRuntime.baseData.pieceName.Contains("Pawn") && pieceRuntime.canAttackStraight)
+        {
+            if (!directionsToCheck.Contains(Vector2Int.up)) directionsToCheck.Add(Vector2Int.up);
+            if (!directionsToCheck.Contains(Vector2Int.down)) directionsToCheck.Add(Vector2Int.down);
+            if (!directionsToCheck.Contains(Vector2Int.left)) directionsToCheck.Add(Vector2Int.left);
+            if (!directionsToCheck.Contains(Vector2Int.right)) directionsToCheck.Add(Vector2Int.right);
+        }
+
+        // Đổi vòng lặp gốc từ pieceRuntime.currentMoveDirections sang directionsToCheck
+        foreach (Vector2Int dir in directionsToCheck)
         {
             for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
             {

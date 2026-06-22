@@ -4,7 +4,7 @@ using DG.Tweening;
 
 public class PlayerControl : MonoBehaviour
 {
-    public enum PlayerState { Idle, DraggingPiece, Aiming, ConfirmingAttack, Animating }
+    public enum PlayerState { Idle, DraggingPiece, Aiming, ConfirmingAttack, Animating, AimingSkill }
 
     [Header("Core References")]
     [SerializeField] private ChessBoard chessBoard;
@@ -28,6 +28,7 @@ public class PlayerControl : MonoBehaviour
     private bool hasMovedThisTurn = false;
 
     private PlayerState currentState = PlayerState.Idle;
+    private List<Vector2Int> currentSpecialSkillTiles = new List<Vector2Int>();
     private ChessPiece selectedPiece;
     private BoardTile lastHoveredTile;
 
@@ -67,6 +68,8 @@ public class PlayerControl : MonoBehaviour
         chessControl.onPointerUp += HandlePointerUp;
         chessControl.onCancelTriggered += CancelTargeting;
 
+        if (pieceContextUI != null) pieceContextUI.OnSkillButtonClicked += HandleSkillButtonClicked;
+
         if (gameManager != null)
         {
             gameManager.OnPieceMoved += HandlePieceMoved;
@@ -85,6 +88,8 @@ public class PlayerControl : MonoBehaviour
         chessControl.onPointerDown -= HandlePointerDown;
         chessControl.onPointerUp -= HandlePointerUp;
         chessControl.onCancelTriggered -= CancelTargeting;
+
+        if (pieceContextUI != null) pieceContextUI.OnSkillButtonClicked -= HandleSkillButtonClicked;
 
         if (gameManager != null)
         {
@@ -112,7 +117,126 @@ public class PlayerControl : MonoBehaviour
         }
     }
 
+    private void HandleSkillButtonClicked(ChessPiece piece)
+    {
+        if (piece == null || piece.pieceData == null) return;
 
+        if (!gameManager.CanPlayerAction(piece.faction)) return;
+
+        ChessPieceRuntime data = piece.pieceData;
+
+        switch (data.baseData.activeSkill)
+        {
+            case SkillType.PawnShield:
+                ActivatePawnShield(data);
+                break;
+            case SkillType.BishopSilence:     
+                ActivateBishopSilence(data);
+                break;
+            case SkillType.KingRevive:       
+                ActivateKingRevive(data);
+                break;
+            case SkillType.KingSweep: 
+                break;
+            case SkillType.KingDash: 
+                ActivateKingDash(piece, data);
+                break;
+        }
+        pieceContextUI.Show(piece);
+    }
+    private void ActivateKingRevive(ChessPieceRuntime kingData)
+    {
+        if (kingData.hasUsedRevive) return;
+
+        var graveyard = gameManager.graveyard;
+        DeadPieceRecord targetRecord = null;
+        int recordIndex = -1;
+
+        for (int i = graveyard.Count - 1; i >= 0; i--)
+        {
+            if (graveyard[i].faction == kingData.faction)
+            {
+                if (chessBoard.boardData.IsTileEmptyForMovement(graveyard[i].deathPos.x, graveyard[i].deathPos.y))
+                {
+                    targetRecord = graveyard[i];
+                    recordIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (targetRecord == null)
+        {
+            Debug.LogWarning("[Skill] Có đồng đội chết nhưng tọa độ hồi sinh đang bị kẻ khác chiếm chỗ!");
+            return; // Trả về, chưa bị mất lượt và chưa bị tính là đã xài skill
+        }
+
+        // HỒI SINH! (Dùng chung hàm SpawnPiece của Bàn cờ)
+        // Lưu ý: Cần truyền prefab piece, do PlayerControl không giữ, ta tìm 1 con cờ bất kỳ trên bảng để lấy prefab,
+        // hoặc để nhanh nhất, hàm SpawnPiece của ChessBoard đang cần prefab, ta phải lấy nó.
+        // Cách lấy: ta dùng con Vua hiện tại làm mồi nhử để gọi Instantiate, nhưng tốt nhất nên refactor hàm SpawnPiece ở bước sau, tạm thời ta sẽ dùng prefab của chính con Vua.
+
+        chessBoard.SpawnPiece(targetRecord.pieceData, selectedPiece != null ? selectedPiece : FindRogueKingPiece(), targetRecord.deathPos, targetRecord.faction);
+
+        // Xóa khỏi nghĩa trang
+        graveyard.RemoveAt(recordIndex);
+
+        kingData.hasUsedRevive = true;
+        hasMovedThisTurn = true;
+        Debug.Log($"[Skill] Vua đã HỒI SINH {targetRecord.pieceData.pieceName} tại {targetRecord.deathPos}!");
+
+        gameManager.ActionCompleted(true);
+    }
+    private void ActivateBishopSilence(ChessPieceRuntime data)
+    {
+        ChessPieceRuntime enemyKing = FindEnemyKing(data.faction);
+        if (enemyKing == null)
+        {
+            Debug.LogWarning("[Skill] Không tìm thấy Vua địch trên bàn cờ!");
+            return;
+        }
+
+        // Áp dụng hiệu ứng
+        enemyKing.silencedTurnsLeft = 1; // Cấm Vua địch 1 lượt
+        data.currentSkillCooldown = 3;   // Tượng phải đợi 3 lượt mới được xài lại
+
+        hasMovedThisTurn = true;
+        Debug.Log($"[Skill] Tượng tại {data.currentGridPosition} tung Tia Phán Xét! Vua địch đã bị CẤM SKILL.");
+
+        // Tùy chọn: Gọi hiệu ứng VFX laze ở đây
+
+        gameManager.ActionCompleted(true); // Kết thúc lượt
+    }
+
+    private ChessPieceRuntime FindEnemyKing(ChessFaction myFaction)
+    {
+        for (int x = 0; x < chessBoard.boardWidth; x++)
+        {
+            for (int y = 0; y < chessBoard.boardHeight; y++)
+            {
+                var piece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(x, y);
+                // Tìm quân cờ TRÁI PHE và có tên chứa chữ "King" (Bạn nhớ đặt tên file ChessPieceData của Vua có chữ King nhé)
+                if (piece != null && piece.faction != myFaction && piece.baseData.pieceName.Contains("King"))
+                {
+                    return piece;
+                }
+            }
+        }
+        return null;
+    }
+    private void ActivatePawnShield(ChessPieceRuntime data)
+    {
+        data.hasShield = true;
+        gameManager.hasUsedPawnShieldThisTurn = true;
+        hasMovedThisTurn = true;
+
+        Debug.Log($"[Skill] Tốt tại {data.currentGridPosition} đã bật khiên!");
+
+        // Tùy chọn: Thêm VFX bật khiên ở đây
+        // ...
+
+        gameManager.ActionCompleted(true);
+    }
     private void Update()
     {
         BoardTile currentTile = chessControl.hoveredTile;
@@ -166,6 +290,17 @@ public class PlayerControl : MonoBehaviour
                     CancelTargeting();
                 }
                 break;
+            case PlayerState.AimingSkill:
+                if (currentSpecialSkillTiles.Contains(cellPos))
+                {
+                    currentState = PlayerState.Animating;
+                    ExecuteKingSweepMove(cellPos);
+                }
+                else
+                {
+                    CancelTargeting();
+                }
+                break;
         }
     }
 
@@ -213,6 +348,8 @@ public class PlayerControl : MonoBehaviour
 
     private void UpdateIdleHover(BoardTile currentTile)
     {
+        if (chessControl.isHoveringUI) return;
+
         if (lastHoveredTile != null && lastHoveredTile != currentTile)
             lastHoveredTile.ToggleSelection(false);
 
@@ -221,7 +358,7 @@ public class PlayerControl : MonoBehaviour
 
         lastHoveredTile = currentTile;
 
-        if (currentTile != null && currentTile.currentPiece != null && !chessControl.isHoveringUI)
+        if (currentTile != null && currentTile.currentPiece != null)
         {
             if (currentHoveredPieceForUI != currentTile.currentPiece)
             {
@@ -322,10 +459,12 @@ public class PlayerControl : MonoBehaviour
         ClearHighlightTiles(currentValidMoves);
         ClearHighlightTiles(currentValidAttacks);
         ClearHighlightTiles(currentAoETiles);
+        ClearHighlightTiles(currentSpecialSkillTiles);
 
         currentValidMoves.Clear();
         currentValidAttacks.Clear();
         currentAoETiles.Clear();
+        currentSpecialSkillTiles.Clear();
 
         currentState = PlayerState.Idle;
         lockedAttackTarget = new Vector2Int(-1, -1);
@@ -516,5 +655,135 @@ public class PlayerControl : MonoBehaviour
     {
         foreach (var pos in validTiles) chessBoard.GetTileAt(pos)?.SetTileState(TileState.None);
         validTiles.Clear();
+    }
+    private void ActivateKingDash(ChessPiece piece, ChessPieceRuntime kingData)
+    {
+        if (kingData.currentSkillCooldown > 0) return;
+
+        selectedPiece = piece;
+        currentState = PlayerState.AimingSkill;
+        currentSpecialSkillTiles.Clear();
+
+        Vector2Int kingPos = kingData.currentGridPosition;
+        Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+        int maxDashRange = 3; 
+
+        foreach (var d in directions)
+        {
+            for (int i = 1; i <= maxDashRange; i++)
+            {
+                Vector2Int checkPos = kingPos + d * i;
+                if (!chessBoard.boardData.IsValidPosition(checkPos.x, checkPos.y)) break;
+
+                var targetPiece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(checkPos.x, checkPos.y);
+                if (targetPiece != null) break; 
+
+                currentSpecialSkillTiles.Add(checkPos);
+            }
+        }
+
+        ShowHighlightTiles(currentSpecialSkillTiles, TileState.ValidMove);
+        if (pieceContextUI != null) pieceContextUI.Hide();
+    }
+
+    private void CheckAndMeleeAttackEnemyKing(Vector2Int kingPos)
+    {
+        Vector2Int[] adjacentDirs = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+
+        foreach (var dir in adjacentDirs)
+        {
+            Vector2Int checkPos = kingPos + dir;
+            if (!chessBoard.boardData.IsValidPosition(checkPos.x, checkPos.y)) continue;
+
+            var target = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(checkPos.x, checkPos.y);
+            // Nếu giáp mặt kẻ địch có tên chứa chữ King
+            if (target != null && target.faction == ChessFaction.ChessAlliance && target.baseData.pieceName.Contains("King"))
+            {
+                Debug.Log($"[Passive Cận Chiến] Giáp mặt Vua địch! Vua Rogue tự động vả đòn cận chiến.");
+
+                // Khởi tạo một hiệu ứng đấm trực tiếp 50 sát thương vào đầu Vua địch
+                CombatEffect meleeDamage = new CombatEffect(EffectType.Damage, 50);
+
+                // Trực tiếp gọi hàm dính đòn của CombatManager
+                // Lưu ý: Sử dụng phương thức phản xạ để gọi ApplyEffect vì nó là private trong CombatManager gốc
+                var method = combatManager.GetType().GetMethod("ApplyEffect", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (method != null)
+                {
+                    method.Invoke(combatManager, new object[] { target, meleeDamage });
+                }
+                break;
+            }
+        }
+    }
+    private void ActivateKingSweep(ChessPiece piece, ChessPieceRuntime kingData)
+    {
+        if (kingData.sweepUsesLeft <= 0) return;
+
+        selectedPiece = piece;
+        currentState = PlayerState.AimingSkill;
+        currentSpecialSkillTiles.Clear();
+
+        Vector2Int kingPos = kingData.currentGridPosition;
+        Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+
+        foreach (var d in directions)
+        {
+            int i = 1;
+            while (true)
+            {
+                Vector2Int checkPos = kingPos + d * i;
+
+                // 1. Nếu chạm rìa bàn cờ thì dừng quét hướng này
+                if (!chessBoard.boardData.IsValidPosition(checkPos.x, checkPos.y)) break;
+
+                // 2. Kiểm tra vật cản ô tiếp theo
+                var targetPiece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(checkPos.x, checkPos.y);
+
+                // NẾU GẶP BẤT KỲ QUÂN CỜ NÀO (BẤT KỂ BẠN HAY ĐỊCH):
+                // Hướng lướt bị chặn đứng hoàn toàn tại đây, không cho phép chọn ô này (Không thể ăn quân)
+                if (targetPiece != null) break;
+
+                // 3. Ô hoàn toàn trống trải -> Hợp lệ để chọn làm điểm đáp trốn thoát
+                currentSpecialSkillTiles.Add(checkPos);
+                i++;
+            }
+        }
+
+        // Bôi xanh hiển thị các ô trống an toàn dọc tuyến đường
+        ShowHighlightTiles(currentSpecialSkillTiles, TileState.ValidMove);
+        if (pieceContextUI != null) pieceContextUI.Hide();
+    }
+
+    private void ExecuteKingSweepMove(Vector2Int targetGridPos)
+    {
+        ClearHighlightTiles(currentSpecialSkillTiles);
+        chessBoard.ResetAllTileHighlights();
+
+        Vector2Int originalPos = selectedPiece.pieceData.currentGridPosition;
+        BoardTile targetTile = chessBoard.GetTileAt(targetGridPos);
+        if (targetTile == null)
+        {
+            CancelTargeting();
+            return;
+        }
+
+        Vector3 targetWorldPos = targetTile.transform.position + chessBoard.PiecePlacementOffset;
+
+        // Bật diễn họa lướt nhanh
+        selectedPiece.gameObject.SetActive(false);
+        ghostPiece.Initialize(selectedPiece.pieceData);
+        ghostPiece.transform.position = selectedPiece.transform.position;
+
+        // Thời gian lướt 0.15s siêu tốc
+        ghostPiece.transform.DOMove(targetWorldPos, 0.15f).SetEase(Ease.InQuad).OnComplete(() =>
+        {
+            ghostPiece.Hide();
+            selectedPiece.pieceData.sweepUsesLeft--; // Trừ số lượt sử dụng
+
+            if (gameManager != null)
+            {
+                gameManager.RequestSpecialMovePiece(originalPos, targetGridPos);
+            }
+        });
     }
 }

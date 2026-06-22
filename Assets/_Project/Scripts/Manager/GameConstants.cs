@@ -26,3 +26,14 @@ public enum MovementType
     Slide,  // Can move in a direction until blocked
     Jump    // Can move to specific positions regardless of obstacles
 }
+public enum SkillType
+{
+    None,
+    PawnShield,     
+    BishopSilence,
+    KingRevive,   
+    QueenGuard,
+    KingSweep,
+    KingDash,  
+    KingCharm
+}
