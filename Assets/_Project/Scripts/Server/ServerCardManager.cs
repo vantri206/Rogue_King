@@ -12,129 +12,110 @@ public class ServerCardManager : NetworkBehaviour
 
     public override void Spawned()
     {
-        if (Instance == null) Instance = this;
-        else Runner.Despawn(Object);
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Runner.Despawn(Object);
+        }
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     public CardData GetCardData(int index)
     {
-        if (availableCards == null || index < 0 || index >= availableCards.Count) return null;
+        if (availableCards == null || index < 0 || index >= availableCards.Count)
+            return null;
+
         return availableCards[index];
     }
 
     public int GetCardIndex(CardData data)
     {
-        if (availableCards == null || data == null) return -1;
+        if (availableCards == null || data == null)
+            return -1;
+
         return availableCards.IndexOf(data);
     }
 
-    // Hàm Phán xử khi Client gửi RPC yêu cầu dùng bài
+    // Server-side test flow cho card:
+    // Client bấm card -> server validate lượt/card/target -> trừ Uses/Cooldown -> sync lại UI.
+    // Bản này cố ý chưa apply gameplay effect và không còn phụ thuộc CardEffectType/effectValue trong CardData.
     public bool ProcessCardRequest(PlayerRef player, PlayerNetworkController controller, int handIndex, Vector2Int targetPos)
     {
-        if (!HasStateAuthority) return false;
+        if (!HasStateAuthority || controller == null)
+            return false;
+
+        if (handIndex < 0 || handIndex >= controller.HandCards.Length)
+        {
+            Debug.LogWarning($"[Server Card] Rejected card request: invalid handIndex={handIndex} from {player}.");
+            return false;
+        }
 
         NetworkCardInstance cardInstance = controller.HandCards[handIndex];
-        if (!cardInstance.isInitialized) return false;
-        if (cardInstance.currentCooldown > 0 || cardInstance.remainingUses <= 0) return false;
+        if (!cardInstance.isInitialized)
+        {
+            Debug.LogWarning($"[Server Card] Rejected card request: slot {handIndex} is not initialized.");
+            return false;
+        }
+
+        if (cardInstance.currentCooldown > 0 || cardInstance.remainingUses <= 0)
+        {
+            Debug.LogWarning($"[Server Card] Rejected card request: card not ready. Cooldown={cardInstance.currentCooldown}, Uses={cardInstance.remainingUses}.");
+            return false;
+        }
 
         CardData data = GetCardData(cardInstance.cardDataIndex);
-        if (data == null) return false;
-
-        ChessPieceRuntime targetRuntime = null;
-        NetworkChessPiece targetNetPiece = null;
-
-        // Nếu client có gửi kèm tọa độ mục tiêu (Dùng cho Siêu Buff, Đánh Úp...)
-        if (targetPos.x >= 0 && targetPos.y >= 0)
+        if (data == null)
         {
-            targetRuntime = ServerBoardManager.Instance.GetRuntimeAt(targetPos);
-            targetNetPiece = ServerBoardManager.Instance.GetPieceAt(targetPos);
-
-            // Xác thực xem mục tiêu có đúng tên yêu cầu không
-            if (targetRuntime != null && !string.IsNullOrEmpty(data.requiredTargetName))
-            {
-                if (!targetRuntime.baseData.pieceName.Contains(data.requiredTargetName))
-                    return false;
-            }
+            Debug.LogWarning($"[Server Card] Rejected card request: cardDataIndex={cardInstance.cardDataIndex} not found in availableCards.");
+            return false;
         }
 
-        ChessFaction myFaction = ServerGameManager.Instance.IsKingPlayer(player) ? ChessFaction.ChessRogue : ChessFaction.ChessAlliance;
-        bool isSuccess = true;
+        if (!ValidateTargetIfNeeded(data, targetPos))
+            return false;
 
-        // --- BẮT ĐẦU THỰC THI HIỆU ỨNG TRÊN SERVER ---
-        switch (data.effectType)
-        {
-            case CardEffectType.SuperBuff:
-                if (targetRuntime != null && targetNetPiece != null)
-                {
-                    targetRuntime.currentAttack += data.effectValue1;
-                    targetRuntime.baseData.baseHealth += data.effectValue2;
-                    targetRuntime.currentHealth += data.effectValue2;
-                    targetNetPiece.currentHp = targetRuntime.currentHealth; // Đồng bộ UI cho Client
-                }
-                else isSuccess = false;
-                break;
+        cardInstance.remainingUses--;
+        cardInstance.currentCooldown = Mathf.Max(0, data.baseCooldown);
+        controller.HandCards.Set(handIndex, cardInstance);
 
-            case CardEffectType.ExtraTurn:
-                controller.hasExtraTurn = true; // Buff trực tiếp vào controller của người chơi đó
-                break;
-
-            case CardEffectType.March:
-                ForEachFriendlyPiece(myFaction, "Pawn", (runtime, netPiece) => {
-                    runtime.currentMoveRange += data.effectValue1;
-                    runtime.baseData.baseHealth += data.effectValue2;
-                    runtime.currentHealth += data.effectValue2;
-                    netPiece.currentHp = runtime.currentHealth;
-                });
-                break;
-
-            case CardEffectType.PawnForwardAttack:
-                ForEachFriendlyPiece(myFaction, "Pawn", (runtime, netPiece) => {
-                    runtime.canAttackStraight = true;
-                });
-                break;
-
-            case CardEffectType.Recall:
-                if (targetRuntime != null)
-                {
-                    Vector2Int oldPos = targetRuntime.previousGridPosition;
-                    if (ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(oldPos.x, oldPos.y))
-                    {
-                        ServerBoardManager.Instance.MovePiece(targetRuntime.currentGridPosition, oldPos);
-                    }
-                    else isSuccess = false; // Bị kẹt vật cản
-                }
-                else isSuccess = false;
-                break;
-
-                // (Bạn có thể bổ sung lại các Case BishopSilence, PawnShield... tương tự)
-        }
-
-        // Nếu xài thành công, trừ số lần dùng và bắt đầu tính Cooldown
-        if (isSuccess)
-        {
-            cardInstance.remainingUses--;
-            cardInstance.currentCooldown = data.baseCooldown;
-            controller.HandCards.Set(handIndex, cardInstance); // Lưu ngược lại vào mảng Network
-            Debug.Log($"[Server Card] Player {player} xài thẻ {data.cardName} thành công!");
-        }
-
-        return isSuccess;
+        Debug.Log($"[Server Card] Player {player} used test card '{data.cardName}'. RemainingUses={cardInstance.remainingUses}, Cooldown={cardInstance.currentCooldown}.");
+        return true;
     }
 
-    private void ForEachFriendlyPiece(ChessFaction faction, string requiredNamePart, System.Action<ChessPieceRuntime, NetworkChessPiece> action)
+    private bool ValidateTargetIfNeeded(CardData data, Vector2Int targetPos)
     {
-        var board = ServerBoardManager.Instance.logicBoard;
-        for (int x = 0; x < board.width; x++)
+        if (string.IsNullOrEmpty(data.requiredTargetName))
+            return true;
+
+        if (targetPos.x < 0 || targetPos.y < 0)
         {
-            for (int y = 0; y < board.height; y++)
-            {
-                var runtime = board.GetEntityAt<ChessPieceRuntime>(x, y);
-                if (runtime != null && runtime.faction == faction && (string.IsNullOrEmpty(requiredNamePart) || runtime.baseData.pieceName.Contains(requiredNamePart)))
-                {
-                    var netPiece = ServerBoardManager.Instance.GetPieceAt(new Vector2Int(x, y));
-                    action?.Invoke(runtime, netPiece);
-                }
-            }
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires target containing '{data.requiredTargetName}', but client sent no target.");
+            return false;
         }
+
+        if (ServerBoardManager.Instance == null)
+            return false;
+
+        ChessPieceRuntime targetRuntime = ServerBoardManager.Instance.GetRuntimeAt(targetPos);
+        if (targetRuntime == null || targetRuntime.baseData == null)
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' target at {targetPos} is empty or invalid.");
+            return false;
+        }
+
+        if (!targetRuntime.baseData.pieceName.Contains(data.requiredTargetName))
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires target containing '{data.requiredTargetName}', got '{targetRuntime.baseData.pieceName}'.");
+            return false;
+        }
+
+        return true;
     }
 }

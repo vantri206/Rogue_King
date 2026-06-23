@@ -69,6 +69,14 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public override void Spawned()
     {
+        // Dedicated Server thường có StateAuthority nhưng không có InputAuthority local.
+        // Vì vậy phải phát bài trước khi kiểm tra TryAcquireLocalInput(), nếu không server sẽ return sớm
+        // và HandCards sẽ không bao giờ được initialize cho client.
+        if (HasStateAuthority)
+        {
+            TryInitializeDeckOnServer();
+        }
+
         if (!TryAcquireLocalInput())
             return;
 
@@ -84,10 +92,6 @@ public class PlayerNetworkController : NetworkBehaviour
         if (debugInputLogs)
         {
             Debug.Log($"[Client Input] PlayerNetworkController ready. MyInputAuthority={Object.InputAuthority}, NetworkObject={Object.Id}");
-        }
-        if (HasStateAuthority)
-        {
-            InitializeDeckOnServer(); 
         }
     }
 
@@ -170,8 +174,12 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        // Intentionally empty.
         // Do not read Unity input here: Fusion can resimulate FixedUpdateNetwork ticks.
+        // Server chỉ dùng hàm này để retry phát bài nếu ServerCardManager spawn sau PlayerNetworkController.
+        if (HasStateAuthority && !deckInitializedOnServer)
+        {
+            TryInitializeDeckOnServer();
+        }
     }
 
     private void ResolveSceneReferences()
@@ -1131,9 +1139,10 @@ public class PlayerNetworkController : NetworkBehaviour
     // ==============================================================
 
     [Header("Card System (Networked)")]
-    [SerializeField] private List<CardData> startingDeck; // Kéo thả các lá bài bạn muốn cấp cho Player này vào đây
+    [SerializeField] private List<CardData> startingDeck; // Kéo thả 1 lá test card vào đây nếu chỉ cần test UI/RPC.
 
     [Networked] public NetworkBool hasExtraTurn { get; set; }
+    private bool deckInitializedOnServer;
 
     // Mảng thẻ bài đồng bộ thời gian thực. Khi Server thay đổi, hàm OnHandCardsChanged sẽ tự động chạy ở Client.
     [Networked, Capacity(10), OnChangedRender(nameof(OnHandCardsChanged))]
@@ -1141,33 +1150,57 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public static PlayerNetworkController Local => activeLocalInputController;
 
-    // Server gọi hàm này lúc mới Spawn để phát bài cho người chơi
-    private void InitializeDeckOnServer()
+    // Server gọi hàm này lúc mới Spawn để phát bài cho người chơi.
+    // Trả về false khi ServerCardManager chưa sẵn sàng để FixedUpdateNetwork retry ở tick sau.
+    private bool TryInitializeDeckOnServer()
     {
-        if (startingDeck == null || ServerCardManager.Instance == null) return;
+        if (!HasStateAuthority) return false;
+        if (deckInitializedOnServer) return true;
+        if (startingDeck == null || ServerCardManager.Instance == null) return false;
 
+        for (int i = 0; i < HandCards.Length; i++)
+        {
+            HandCards.Set(i, default);
+        }
+
+        int initializedCount = 0;
         for (int i = 0; i < startingDeck.Count && i < HandCards.Length; i++)
         {
-            int globalIndex = ServerCardManager.Instance.GetCardIndex(startingDeck[i]);
-            if (globalIndex >= 0)
+            CardData cardData = startingDeck[i];
+            int globalIndex = ServerCardManager.Instance.GetCardIndex(cardData);
+            if (cardData == null || globalIndex < 0)
             {
-                NetworkCardInstance card = new NetworkCardInstance
-                {
-                    cardDataIndex = globalIndex,
-                    currentCooldown = 0,
-                    remainingUses = startingDeck[i].maxUses,
-                    isInitialized = true
-                };
-                HandCards.Set(i, card); // Nạp đạn vào mảng mạng
+                Debug.LogWarning($"[Server Card] Bỏ qua card slot {i}: CardData null hoặc chưa được đăng ký trong ServerCardManager.availableCards.");
+                continue;
             }
+
+            NetworkCardInstance card = new NetworkCardInstance
+            {
+                cardDataIndex = globalIndex,
+                currentCooldown = 0,
+                remainingUses = Mathf.Max(1, cardData.maxUses),
+                isInitialized = true
+            };
+
+            HandCards.Set(i, card);
+            initializedCount++;
         }
+
+        deckInitializedOnServer = true;
+
+        if (debugInputLogs)
+        {
+            Debug.Log($"[Server Card] Initialized {initializedCount} card(s) for player {Object.InputAuthority} on NetworkObject={Object.Id}.");
+        }
+
+        return true;
     }
 
     // Kênh RPC: Client Gửi Yêu Cầu Xài Bài Lên Server
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     public void Rpc_RequestPlayCard(int handIndex, Vector2Int targetPos, RpcInfo info = default)
     {
-        if (ServerCardManager.Instance == null) return;
+        if (ServerCardManager.Instance == null || ServerGameManager.Instance == null) return;
         if (!ServerGameManager.Instance.CanPlayerAct(info.Source)) return;
 
         ServerCardManager.Instance.ProcessCardRequest(info.Source, this, handIndex, targetPos);

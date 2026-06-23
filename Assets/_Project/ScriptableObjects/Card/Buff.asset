@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: PawnShield
   effectType: 1
-  requiredTargetName: Pawn
-  baseCooldown: 1
-  maxUses: 2
+  requiredTargetName: 
+  baseCooldown: 0
+  maxUses: 3
   effectValue1: 10
   effectValue2: 10
