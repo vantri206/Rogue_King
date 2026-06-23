@@ -1,11 +1,5 @@
 {
   "dependencies": {
-    "com.merry-yellow.code-assist": {
-      "version": "file:com.merry-yellow.code-assist",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {}
-    },
     "com.unity.2d.animation": {
       "version": "13.0.4",
       "depth": 0,
@@ -288,6 +282,13 @@
         "com.unity.modules.jsonserialize": "1.0.0"
       },
       "url": "https://packages.unity.com"
+    },
+    "com.veriorpies.parrelsync": {
+      "version": "https://github.com/VeriorPies/ParrelSync.git?path=/ParrelSync",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "a122dc90cbe2d4cc2669ddad00b12b3917ef934b"
     },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",

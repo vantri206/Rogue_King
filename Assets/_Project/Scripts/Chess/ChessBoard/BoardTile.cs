@@ -6,7 +6,8 @@ public enum TileState
     ValidMove,
     HoverInvalid,
     HoverValid,
-    AttackTarget // Add this for attack preview
+    AttackTarget, // Orange AoE / impact preview
+    AttackRange   // Blue targeting range for weapon aiming
 }
 
 public class BoardTile : MonoBehaviour
@@ -28,6 +29,7 @@ public class BoardTile : MonoBehaviour
     public Color colorHoverValid = Color.cyan;
     public Color colorHoverInvalid = Color.red;
     public Color colorAttackTarget = Color.orange;
+    public Color colorAttackRange = Color.cyan;
 
     private bool isWhiteTile;
 
@@ -71,6 +73,9 @@ public class BoardTile : MonoBehaviour
 
     public void SetTileState(TileState state)
     {
+        if (highlightRenderer == null)
+            return;
+
         if (state == TileState.None)
         {
             highlightRenderer.gameObject.SetActive(false);
@@ -92,6 +97,9 @@ public class BoardTile : MonoBehaviour
                 break;
             case TileState.AttackTarget:
                 highlightRenderer.color = colorAttackTarget;
+                break;
+            case TileState.AttackRange:
+                highlightRenderer.color = colorAttackRange;
                 break;
         }
     }

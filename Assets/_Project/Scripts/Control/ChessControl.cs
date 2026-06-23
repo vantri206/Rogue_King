@@ -7,6 +7,7 @@ public class ChessControl : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private Camera mainCamera;
+    [SerializeField] private ChessBoard chessBoard;
 
     private InputSystem_Actions inputActions;
     private Vector2 pointerPosition;
@@ -23,7 +24,7 @@ public class ChessControl : MonoBehaviour
     private void Awake()
     {
         inputActions = new InputSystem_Actions();
-        if (mainCamera == null) mainCamera = Camera.main;
+        ResolveReferences();
     }
 
     private void OnEnable()
@@ -48,8 +49,16 @@ public class ChessControl : MonoBehaviour
 
     private void Update()
     {
+        ResolveReferences();
+
         isHoveringUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
         UpdateHoverData();
+    }
+
+    private void ResolveReferences()
+    {
+        if (mainCamera == null) mainCamera = Camera.main;
+        if (chessBoard == null) chessBoard = FindFirstObjectByType<ChessBoard>();
     }
 
     private void OnPointerPositionChanged(InputAction.CallbackContext context)
@@ -59,7 +68,7 @@ public class ChessControl : MonoBehaviour
 
     private void UpdateHoverData()
     {
-        if (isHoveringUI)
+        if (isHoveringUI || mainCamera == null)
         {
             hoveredTile = null;
             hoveredCell = new Vector2Int(-1, -1);
@@ -68,15 +77,36 @@ public class ChessControl : MonoBehaviour
 
         mouseWorldPosition = mainCamera.ScreenToWorldPoint(pointerPosition);
         Vector3 rayPos = mouseWorldPosition;
-        rayPos.z = 0;
+        rayPos.z = 0f;
 
-        RaycastHit2D hit = Physics2D.Raycast(rayPos, Vector2.zero);
-        if (hit.collider != null)
+        // NetworkChessPiece prefabs may have their own Collider2D and can sit above the tile.
+        // RaycastAll lets us skip piece colliders and still find the BoardTile below.
+        Collider2D[] hits = Physics2D.OverlapPointAll(rayPos);
+        foreach (Collider2D hit in hits)
         {
-            hoveredTile = hit.collider.GetComponent<BoardTile>();
-            if (hoveredTile != null)
+            if (hit == null) continue;
+
+            BoardTile tile = hit.GetComponent<BoardTile>();
+            if (tile == null)
+                tile = hit.GetComponentInParent<BoardTile>();
+
+            if (tile != null)
             {
-                hoveredCell = new Vector2Int(hoveredTile.boardX, hoveredTile.boardY);
+                hoveredTile = tile;
+                hoveredCell = new Vector2Int(tile.boardX, tile.boardY);
+                return;
+            }
+        }
+
+        // Fallback for cases where piece colliders block raycasts or tiles have no collider.
+        if (chessBoard != null)
+        {
+            Vector2Int fallbackCell = chessBoard.WorldToGrid(rayPos);
+            BoardTile fallbackTile = chessBoard.GetTileAt(fallbackCell);
+            if (fallbackTile != null)
+            {
+                hoveredTile = fallbackTile;
+                hoveredCell = fallbackCell;
                 return;
             }
         }

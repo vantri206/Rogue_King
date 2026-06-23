@@ -20,11 +20,18 @@ public class ChessBoard : MonoBehaviour
     [SerializeField] private float tileSize = 1f;
     [SerializeField] private Vector3 piecePlacementOffset = new Vector3(0f, 0.4f, 0f);
 
+    [Header("Offline / Local Preview")]
+    [Tooltip("Dedicated-server multiplayer scenes should leave this OFF. Network pieces are spawned by ServerBoardManager.")]
+    [SerializeField] private bool spawnInitialLocalPieces = false;
+
     public BoardData boardData { get; private set; }
 
     private BoardTile[,] grid;
 
+    public LevelData CurrentLevelData => currentLevelData;
     public Vector3 PiecePlacementOffset => piecePlacementOffset;
+    public float TileSize => tileSize;
+    public Transform EntitiesContainer => entitiesContainer;
 
     public int boardWidth { get; private set; }
     public int boardHeight { get; private set; }
@@ -36,7 +43,11 @@ public class ChessBoard : MonoBehaviour
             if (currentLevelData != null)
             {
                 GenerateBoard();
-                SpawnInitialPieces();
+
+                if (spawnInitialLocalPieces)
+                {
+                    SpawnInitialPieces();
+                }
             }
             else
             {
@@ -48,7 +59,7 @@ public class ChessBoard : MonoBehaviour
     private void SpawnInitialPieces()
     {
         if (currentLevelData.initialPieces == null) return;
-        
+
         foreach (var piece in currentLevelData.initialPieces)
         {
             if (piece.pieceData != null && piecePrefab != null)
@@ -66,7 +77,10 @@ public class ChessBoard : MonoBehaviour
         boardHeight = currentLevelData.boardHeight;
         grid = new BoardTile[boardWidth, boardHeight];
 
-        var existenceList = currentLevelData.tileExistenceMap != null ? currentLevelData.tileExistenceMap.ToList() : null;
+        var existenceList = currentLevelData.tileExistenceMap != null
+            ? currentLevelData.tileExistenceMap.ToList()
+            : null;
+
         boardData = new BoardData(boardWidth, boardHeight, existenceList);
 
         for (int x = 0; x < boardWidth; x++)
@@ -76,7 +90,7 @@ public class ChessBoard : MonoBehaviour
                 if (boardData.IsValidPosition(x, y))
                 {
                     Vector3 localPos = new Vector3(x * tileSize, -y * tileSize, 0f);
-                    
+
                     BoardTile newTile = Instantiate(tilePrefab, interactableTilesContainer);
                     newTile.transform.localPosition = localPos;
                     newTile.Initialize(x, y);
@@ -89,6 +103,40 @@ public class ChessBoard : MonoBehaviour
                 }
             }
         }
+    }
+
+    public Vector3 GetTileWorldPosition(Vector2Int gridPos)
+    {
+        if (grid != null && boardData != null && boardData.IsValidPosition(gridPos.x, gridPos.y))
+        {
+            BoardTile tile = grid[gridPos.x, gridPos.y];
+            if (tile != null)
+            {
+                return tile.transform.position;
+            }
+        }
+
+        Transform origin = interactableTilesContainer != null ? interactableTilesContainer : transform;
+        Vector3 localPos = new Vector3(gridPos.x * tileSize, -gridPos.y * tileSize, 0f);
+        return origin.TransformPoint(localPos);
+    }
+
+    public Vector3 GetPieceWorldPosition(Vector2Int gridPos)
+    {
+        return GetTileWorldPosition(gridPos) + piecePlacementOffset;
+    }
+
+    public Vector2Int WorldToGrid(Vector3 worldPosition)
+    {
+        Transform origin = interactableTilesContainer != null ? interactableTilesContainer : transform;
+        Vector3 localPosition = origin.InverseTransformPoint(worldPosition);
+
+        float safeTileSize = Mathf.Approximately(tileSize, 0f) ? 1f : tileSize;
+
+        return new Vector2Int(
+            Mathf.RoundToInt(localPosition.x / safeTileSize),
+            Mathf.RoundToInt(-localPosition.y / safeTileSize)
+        );
     }
 
     public void SpawnPiece(ChessPieceData pieceData, ChessPiece piecePrefab, Vector2Int startPos, ChessFaction faction)
@@ -105,8 +153,7 @@ public class ChessBoard : MonoBehaviour
             return;
         }
 
-        Vector3 tilePos = grid[startPos.x, startPos.y].transform.position;
-        Vector3 worldPos = tilePos + piecePlacementOffset;
+        Vector3 worldPos = GetPieceWorldPosition(startPos);
 
         ChessPiece newPiece = Instantiate(piecePrefab, worldPos, Quaternion.identity, entitiesContainer);
         ChessPieceRuntime newRuntime = new ChessPieceRuntime(pieceData, startPos, faction);
@@ -123,6 +170,7 @@ public class ChessBoard : MonoBehaviour
         {
             return boardData.GetEntityAt<ChessPieceRuntime>(gridPos.x, gridPos.y);
         }
+
         return null;
     }
 
@@ -134,12 +182,15 @@ public class ChessBoard : MonoBehaviour
         {
             return grid[pos.x, pos.y];
         }
+
         return null;
     }
 
     public List<Vector2Int> GetValidMoves(ChessPieceRuntime pieceRuntime)
     {
-        if (boardData == null) return new List<Vector2Int>();
+        if (boardData == null)
+            return new List<Vector2Int>();
+
         return boardData.GetValidMoves(pieceRuntime);
     }
 
@@ -147,6 +198,7 @@ public class ChessBoard : MonoBehaviour
     public void GenerateBoardAndPieces()
     {
         ClearBoard();
+
         if (currentLevelData != null)
         {
             GenerateBoard();
@@ -207,6 +259,7 @@ public class ChessBoard : MonoBehaviour
             boardData.MoveEntity(entity, finish);
         }
     }
+
     public void ResetAllTileHighlights()
     {
         if (grid == null) return;

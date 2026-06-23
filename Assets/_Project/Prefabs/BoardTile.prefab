@@ -139,6 +139,7 @@ MonoBehaviour:
   colorValidMove: {r: 0, g: 1, b: 0, a: 1}
   colorHoverValid: {r: 0, g: 0.0069622993, b: 1, a: 1}
   colorHoverInvalid: {r: 1, g: 0, b: 0, a: 1}
+  colorAttackTarget: {r: 1, g: 0.6470588, b: 0, a: 1}
 --- !u!61 &4014905421818729011
 BoxCollider2D:
   m_ObjectHideFlags: 0
