@@ -1,0 +1,106 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1985735495231317440
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4933387173740010567}
+  - component: {fileID: 6927199911926561279}
+  - component: {fileID: 5022027460805324875}
+  - component: {fileID: 6269751544342321873}
+  - component: {fileID: 6132496844577947427}
+  m_Layer: 0
+  m_Name: ServerManagers_Prefab
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4933387173740010567
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6927199911926561279
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 4248225387
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 5022027460805324875}
+  - {fileID: 6269751544342321873}
+  - {fileID: 6132496844577947427}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &5022027460805324875
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d09da35cf754cbd42bad7ea803de86cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ServerGameManager
+  _currentGameState: 0
+  _currentPhase: 0
+  _phase1TurnCount: 0
+  _phase2TurnCount: 0
+  visualResolveTime: 1.5
+--- !u!114 &6269751544342321873
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a13d73e000fe8334b8e648f6512e4925, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ServerBoardManager
+  currentLevelData: {fileID: 11400000, guid: aeabba77aa1c06242b02101e271c6836, type: 2}
+  networkPiecePrefab:
+    RawGuidValue: c189b8713b287214d816073366d89a3d
+--- !u!114 &6132496844577947427
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7498dcb3f0eb62641a9d3a0ad5f6c8b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ServerCombatManager
+  availableWeapons:
+  - {fileID: 11400000, guid: 678351198be7c744da6d43ec0ab4f797, type: 2}
+  - {fileID: 11400000, guid: de9d7caac4bf0414c99f774e555e9baf, type: 2}
+  - {fileID: 11400000, guid: 1dec8110b38ec754fbb2b76b231046af, type: 2}

@@ -30,7 +30,7 @@ public class CombatManager : SingletonMB<CombatManager>
         }
 
         Vector3 startWorldPos = chessBoard.GetTileAt(attacker.currentGridPosition).transform.position + chessBoard.PiecePlacementOffset;
-        CombatVFXManager.Instance.PlayWeaponVFX(usedWeapon, startWorldPos, validTargets, chessBoard,
+        CombatVFXManager.Instance.PlayWeaponVFX(usedWeapon, startWorldPos, attacker.currentGridPosition, lockedTarget, validTargets, chessBoard,
             (hitGridPos) => OnProjectileHit(hitGridPos, effectMap)
         );
     }

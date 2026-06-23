@@ -80,3 +80,5 @@ MonoBehaviour:
   - {x: 0, y: 0}
   gunPrefab: {fileID: 0}
   projectilePrefab: {fileID: 449155884897940277, guid: 71397930252de4a4a8ca55fed3159c1d, type: 3}
+  vfxProjectileMode: 1
+  serverDamageDelaySeconds: 0

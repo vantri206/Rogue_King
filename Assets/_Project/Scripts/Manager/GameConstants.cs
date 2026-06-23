@@ -8,6 +8,17 @@ public enum GameState
     GameOver          
 }
 
+public enum NetGameState 
+{ 
+    Init, 
+    Setup, 
+    KingTurn, 
+    ChessTurn, 
+    ResolvingAction, 
+    PhaseTransition, 
+    GameOver 
+}
+
 public enum GamePhase
 {
     Phase1,

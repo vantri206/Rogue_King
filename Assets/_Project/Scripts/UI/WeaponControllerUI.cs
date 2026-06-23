@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 using TMPro;
 using System;
 using System.Collections.Generic;
@@ -28,63 +29,146 @@ public class WeaponControllerUI : MonoBehaviour
     public Action onActionPressed;
     public Action<int> onWeaponSelected;
 
+    private bool unityButtonEventsBound;
+    private UnityAction actionButtonHandler;
+    private UnityAction[] weaponSlotHandlers;
+
     private void Awake()
     {
-        if (actionButton != null) actionButton.onClick.AddListener(() => onActionPressed?.Invoke());
+        BindUnityButtonEventsOnce();
+    }
 
-        for (int i = 0; i < weaponSlots.Length; i++)
+    private void OnDestroy()
+    {
+        UnbindUnityButtonEvents();
+        onActionPressed = null;
+        onWeaponSelected = null;
+    }
+
+    private void BindUnityButtonEventsOnce()
+    {
+        if (unityButtonEventsBound)
+            return;
+
+        if (actionButton != null)
         {
-            int index = i;
-            if (weaponSlots[i].slotButton != null)
+            actionButtonHandler = HandleActionButtonClicked;
+            actionButton.onClick.RemoveListener(actionButtonHandler);
+            actionButton.onClick.AddListener(actionButtonHandler);
+        }
+
+        if (weaponSlots != null)
+        {
+            weaponSlotHandlers = new UnityAction[weaponSlots.Length];
+
+            for (int i = 0; i < weaponSlots.Length; i++)
             {
-                weaponSlots[i].slotButton.onClick.AddListener(() => onWeaponSelected?.Invoke(index));
+                int index = i;
+                WeaponSlotUI slot = weaponSlots[i];
+                if (slot == null || slot.slotButton == null)
+                    continue;
+
+                UnityAction handler = () => HandleWeaponSlotClicked(index);
+                weaponSlotHandlers[i] = handler;
+
+                slot.slotButton.onClick.RemoveListener(handler);
+                slot.slotButton.onClick.AddListener(handler);
             }
         }
+
+        unityButtonEventsBound = true;
+    }
+
+    private void UnbindUnityButtonEvents()
+    {
+        if (!unityButtonEventsBound)
+            return;
+
+        if (actionButton != null && actionButtonHandler != null)
+            actionButton.onClick.RemoveListener(actionButtonHandler);
+
+        if (weaponSlots != null && weaponSlotHandlers != null)
+        {
+            for (int i = 0; i < weaponSlots.Length && i < weaponSlotHandlers.Length; i++)
+            {
+                WeaponSlotUI slot = weaponSlots[i];
+                UnityAction handler = weaponSlotHandlers[i];
+                if (slot != null && slot.slotButton != null && handler != null)
+                    slot.slotButton.onClick.RemoveListener(handler);
+            }
+        }
+
+        unityButtonEventsBound = false;
+    }
+
+    private void HandleActionButtonClicked()
+    {
+        onActionPressed?.Invoke();
+    }
+
+    private void HandleWeaponSlotClicked(int index)
+    {
+        onWeaponSelected?.Invoke(index);
     }
 
     public void TogglePanel(bool active)
     {
         if (weaponHUD != null) weaponHUD.SetActive(active);
     }
-    public void SetupWeaponSlots(List<WeaponData> weapons)
+
+    public void SetupWeaponSlots(IReadOnlyList<WeaponData> weapons)
     {
+        if (weaponSlots == null) return;
+
         for (int i = 0; i < weaponSlots.Length; i++)
         {
-            if (i < weapons.Count && weapons[i] != null)
-            { 
-                if (weaponSlots[i].slotButton != null)
-                {
-                    weaponSlots[i].slotButton.gameObject.SetActive(true);
-                }
+            WeaponSlotUI slot = weaponSlots[i];
+            if (slot == null) continue;
 
-                if (weaponSlots[i].weaponNameText != null)
-                {
-                    weaponSlots[i].weaponNameText.text = weapons[i].weaponName;
-                }
+            WeaponData weapon = weapons != null && i < weapons.Count ? weapons[i] : null;
+            bool hasWeapon = weapon != null;
 
-                if (weaponSlots[i].weaponIcon != null)
-                {
-                    weaponSlots[i].weaponIcon.sprite = weapons[i].weaponIcon;
-                    weaponSlots[i].weaponIcon.enabled = true;
-                }
-            }
-            else
+            if (slot.slotButton != null)
             {
-                if (weaponSlots[i].slotButton != null)
-                {
-                    weaponSlots[i].slotButton.gameObject.SetActive(false);
-                }
+                slot.slotButton.gameObject.SetActive(hasWeapon);
+                slot.slotButton.interactable = hasWeapon;
+            }
+
+            if (slot.weaponNameText != null)
+            {
+                slot.weaponNameText.text = hasWeapon ? weapon.weaponName : string.Empty;
+                slot.weaponNameText.gameObject.SetActive(hasWeapon);
+            }
+
+            if (slot.weaponIcon != null)
+            {
+                slot.weaponIcon.sprite = hasWeapon ? weapon.weaponIcon : null;
+                slot.weaponIcon.enabled = hasWeapon && weapon.weaponIcon != null;
+                slot.weaponIcon.gameObject.SetActive(hasWeapon);
+            }
+
+            if (slot.weaponOverlay != null)
+            {
+                slot.weaponOverlay.SetActive(false);
             }
         }
     }
 
     public void UpdateActiveWeaponHighlight(int activeIndex)
     {
+        if (weaponSlots == null) return;
+
         for (int i = 0; i < weaponSlots.Length; i++)
         {
-            if (weaponSlots[i].weaponOverlay != null)
+            WeaponSlotUI slot = weaponSlots[i];
+            if (slot == null) continue;
+
+            bool slotIsVisible = slot.slotButton != null && slot.slotButton.gameObject.activeSelf;
+
+            if (slot.weaponOverlay != null)
             {
-                weaponSlots[i].weaponOverlay.SetActive(i != activeIndex);
+                // Overlay is treated as a dim layer for inactive slots.
+                slot.weaponOverlay.SetActive(slotIsVisible && i != activeIndex);
             }
         }
     }
@@ -96,10 +180,14 @@ public class WeaponControllerUI : MonoBehaviour
             actionButtonText.text = isConfirming ? "FIRE!" : "ATTACK";
         }
 
-        foreach (var slot in weaponSlots)
+        if (weaponSlots == null) return;
+
+        foreach (WeaponSlotUI slot in weaponSlots)
         {
-            if (slot.slotButton != null)
+            if (slot != null && slot.slotButton != null && slot.slotButton.gameObject.activeSelf)
+            {
                 slot.slotButton.interactable = !isConfirming;
+            }
         }
     }
 }
