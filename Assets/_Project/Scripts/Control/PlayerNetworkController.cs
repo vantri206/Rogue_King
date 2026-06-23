@@ -85,6 +85,10 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             Debug.Log($"[Client Input] PlayerNetworkController ready. MyInputAuthority={Object.InputAuthority}, NetworkObject={Object.Id}");
         }
+        if (HasStateAuthority)
+        {
+            InitializeDeckOnServer(); 
+        }
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
@@ -1081,7 +1085,12 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             bool shouldEndTurn = ServerBoardManager.Instance.MovePiece(currentPos, targetPos);
 
-            if (shouldEndTurn)
+            if (hasExtraTurn)
+            {
+                hasExtraTurn = false; 
+                Debug.Log($"[Server] Player {requestingPlayer} kích hoạt Thêm Lượt, KHÔNG qua Turn!");
+            }
+            else
             {
                 ServerGameManager.Instance.EndTurn();
             }
@@ -1117,5 +1126,78 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             ServerGameManager.Instance.EndTurn();
         }
+    }// ==============================================================
+    // KHOẢNG KHÔNG GIAN DÀNH RIÊNG CHO HỆ THỐNG THẺ BÀI (CARD SYSTEM)
+    // ==============================================================
+
+    [Header("Card System (Networked)")]
+    [SerializeField] private List<CardData> startingDeck; // Kéo thả các lá bài bạn muốn cấp cho Player này vào đây
+
+    [Networked] public NetworkBool hasExtraTurn { get; set; }
+
+    // Mảng thẻ bài đồng bộ thời gian thực. Khi Server thay đổi, hàm OnHandCardsChanged sẽ tự động chạy ở Client.
+    [Networked, Capacity(10), OnChangedRender(nameof(OnHandCardsChanged))]
+    public NetworkArray<NetworkCardInstance> HandCards { get; }
+
+    public static PlayerNetworkController Local => activeLocalInputController;
+
+    // Server gọi hàm này lúc mới Spawn để phát bài cho người chơi
+    private void InitializeDeckOnServer()
+    {
+        if (startingDeck == null || ServerCardManager.Instance == null) return;
+
+        for (int i = 0; i < startingDeck.Count && i < HandCards.Length; i++)
+        {
+            int globalIndex = ServerCardManager.Instance.GetCardIndex(startingDeck[i]);
+            if (globalIndex >= 0)
+            {
+                NetworkCardInstance card = new NetworkCardInstance
+                {
+                    cardDataIndex = globalIndex,
+                    currentCooldown = 0,
+                    remainingUses = startingDeck[i].maxUses,
+                    isInitialized = true
+                };
+                HandCards.Set(i, card); // Nạp đạn vào mảng mạng
+            }
+        }
+    }
+
+    // Kênh RPC: Client Gửi Yêu Cầu Xài Bài Lên Server
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    public void Rpc_RequestPlayCard(int handIndex, Vector2Int targetPos, RpcInfo info = default)
+    {
+        if (ServerCardManager.Instance == null) return;
+        if (!ServerGameManager.Instance.CanPlayerAct(info.Source)) return;
+
+        ServerCardManager.Instance.ProcessCardRequest(info.Source, this, handIndex, targetPos);
+    }
+
+    // Server trừ Cooldown thẻ bài mỗi khi qua Turn
+    public void TickCardCooldowns()
+    {
+        if (!HasStateAuthority) return;
+        for (int i = 0; i < HandCards.Length; i++)
+        {
+            NetworkCardInstance card = HandCards[i];
+            if (card.isInitialized && card.currentCooldown > 0)
+            {
+                card.currentCooldown--;
+                HandCards.Set(i, card);
+            }
+        }
+    }
+
+    private void OnHandCardsChanged()
+    {
+        // Khi Server cập nhật mảng bài (VD: vừa xài xong, vừa trừ Cooldown), báo cho giao diện Client Refresh
+        InventoryUI ui = FindFirstObjectByType<InventoryUI>();
+        if (ui != null) ui.RefreshAllCards();
+    }
+
+    public Vector2Int GetSelectedPieceGridPos()
+    {
+        if (selectedPiece != null) return selectedPiece.currentGridPos;
+        return new Vector2Int(-1, -1);
     }
 }

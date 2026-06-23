@@ -56,6 +56,10 @@ MonoBehaviour:
   currentSelectedWeaponIndex: 0
   pieceContextUI: {fileID: 0}
   debugInputLogs: 1
+  startingDeck:
+  - {fileID: 11400000, guid: 4c4f88654b985944f97a9a0b8f7737d4, type: 2}
+  _hasExtraTurn:
+    _value: 0
 --- !u!114 &8115844976239149706
 MonoBehaviour:
   m_ObjectHideFlags: 0

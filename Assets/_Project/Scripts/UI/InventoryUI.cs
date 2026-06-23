@@ -3,88 +3,66 @@ using UnityEngine;
 
 public class InventoryUI : MonoBehaviour
 {
-    [Header("References")]
-    public PlayerControl playerControl;
-    public GameObject cardPrefab;   // Khuôn mẫu của 1 lá bài
-    public Transform handContainer; // Nơi chứa các lá bài (Horizontal Layout Group)
+    public GameObject cardPrefab;
+    public Transform handContainer;
 
     private List<CardUI> spawnedCards = new List<CardUI>();
 
     private void Start()
     {
-        // Delay nhẹ 0.1s để chờ PlayerInventory khởi tạo xong dữ liệu
-        Invoke(nameof(InitializeHand), 0.1f);
-
-        // Đăng ký sự kiện: Cứ qua Turn là làm mới giao diện (Cập nhật số Cooldown)
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.OnTurnChanged += (faction) => RefreshAllCards();
-        }
+        InvokeRepeating(nameof(TryInitializeHand), 0.5f, 0.5f); // Check liên tục đến khi Player Spawn xong
     }
 
-    private void OnDestroy()
+    private void TryInitializeHand()
     {
-        if (GameManager.Instance != null)
+        if (PlayerNetworkController.Local != null && ServerCardManager.Instance != null)
         {
-            GameManager.Instance.OnTurnChanged -= (faction) => RefreshAllCards();
+            if (PlayerNetworkController.Local.HandCards[0].isInitialized)
+            {
+                CancelInvoke(nameof(TryInitializeHand));
+                InitializeHand();
+            }
         }
     }
 
     private void InitializeHand()
     {
-        if (PlayerInventory.Instance == null) return;
-
-        // Xóa các UI thừa nếu có
         foreach (Transform child in handContainer) Destroy(child.gameObject);
         spawnedCards.Clear();
 
-        // Sinh ra các lá bài tương ứng với dữ liệu Hand
-        foreach (var card in PlayerInventory.Instance.handCards)
+        for (int i = 0; i < PlayerNetworkController.Local.HandCards.Length; i++)
         {
-            GameObject go = Instantiate(cardPrefab, handContainer);
-            CardUI cardUI = go.GetComponent<CardUI>();
-            cardUI.Setup(card, OnCardClicked);
-            spawnedCards.Add(cardUI);
+            var netCard = PlayerNetworkController.Local.HandCards[i];
+            if (netCard.isInitialized)
+            {
+                CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
+                GameObject go = Instantiate(cardPrefab, handContainer);
+                CardUI cardUI = go.GetComponent<CardUI>();
+
+                cardUI.SetupNetworked(netCard, data, i, OnCardClicked);
+                spawnedCards.Add(cardUI);
+            }
         }
     }
 
     public void RefreshAllCards()
     {
-        foreach (var cardUI in spawnedCards)
+        if (PlayerNetworkController.Local == null || ServerCardManager.Instance == null || spawnedCards.Count == 0) return;
+
+        for (int i = 0; i < spawnedCards.Count; i++)
         {
-            cardUI.UpdateUI();
+            var netCard = PlayerNetworkController.Local.HandCards[i];
+            CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
+            spawnedCards[i].UpdateUI(netCard, data);
         }
     }
 
-    // Khi User click vào 1 lá bài trên màn hình
-    private void OnCardClicked(CardInstance card)
+    private void OnCardClicked(int slotIndex)
     {
-        ChessPieceRuntime targetPiece = GetSelectedPiece();
+        // Lấy tọa độ mục tiêu từ quân cờ đang click sáng trên bàn
+        Vector2Int targetGridPos = PlayerNetworkController.Local.GetSelectedPieceGridPos();
 
-        // Nếu thẻ yêu cầu mục tiêu cụ thể mà chưa chọn quân cờ nào
-        if (!string.IsNullOrEmpty(card.data.requiredTargetName) && targetPiece == null)
-        {
-            Debug.LogWarning($"[UI] Vui lòng CLICK CHỌN 1 QUÂN {card.data.requiredTargetName.ToUpper()} TRÊN BÀN trước khi dùng thẻ này!");
-            return;
-        }
-
-        // Kích hoạt logic trong RAM
-        CardManager.Instance.ActivateCard(card, targetPiece);
-
-        // Làm mới lại UI (Trừ số lần dùng, bật bảng Cooldown)
-        RefreshAllCards();
-    }
-
-    // Hàm lôi cổ quân cờ đang được người chơi Click chọn (Lấy từ PlayerControl)
-    private ChessPieceRuntime GetSelectedPiece()
-    {
-        if (playerControl == null) return null;
-        var field = playerControl.GetType().GetField("selectedPiece", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (field != null)
-        {
-            ChessPiece piece = field.GetValue(playerControl) as ChessPiece;
-            if (piece != null) return piece.pieceData;
-        }
-        return null;
+        // Gửi RPC báo Server chơi thẻ ở slot này, nhắm vào tọa độ này
+        PlayerNetworkController.Local.Rpc_RequestPlayCard(slotIndex, targetGridPos);
     }
 }

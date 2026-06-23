@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 5022027460805324875}
   - component: {fileID: 6269751544342321873}
   - component: {fileID: 6132496844577947427}
+  - component: {fileID: -3966902962346141956}
   m_Layer: 0
   m_Name: ServerManagers_Prefab
   m_TagString: Untagged
@@ -55,6 +56,7 @@ MonoBehaviour:
   - {fileID: 5022027460805324875}
   - {fileID: 6269751544342321873}
   - {fileID: 6132496844577947427}
+  - {fileID: -3966902962346141956}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &5022027460805324875
 MonoBehaviour:
@@ -88,6 +90,7 @@ MonoBehaviour:
   currentLevelData: {fileID: 11400000, guid: aeabba77aa1c06242b02101e271c6836, type: 2}
   networkPiecePrefab:
     RawGuidValue: c189b8713b287214d816073366d89a3d
+  visualBoard: {fileID: 0}
 --- !u!114 &6132496844577947427
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -104,3 +107,21 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 678351198be7c744da6d43ec0ab4f797, type: 2}
   - {fileID: 11400000, guid: de9d7caac4bf0414c99f774e555e9baf, type: 2}
   - {fileID: 11400000, guid: 1dec8110b38ec754fbb2b76b231046af, type: 2}
+  fallbackDamageDelaySeconds: 1
+  grenadeAutoDamageDelaySeconds: 1.35
+  shotgunAutoDamageDelaySeconds: 0.9
+  maxAutoDamageDelaySeconds: 2
+--- !u!114 &-3966902962346141956
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61944a164fcfa9947a4b53dea7ee0093, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ServerCardManager
+  availableCards:
+  - {fileID: 11400000, guid: 4c4f88654b985944f97a9a0b8f7737d4, type: 2}

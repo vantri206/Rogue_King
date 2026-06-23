@@ -129,7 +129,6 @@ public class ServerBoardManager : NetworkBehaviour
         );
 
         runtime.currentHealth = setup.pieceData.baseHealth;
-        runtime.currentSkillCooldown = setup.pieceData.baseSkillCooldown;
         runtime.silencedTurnsLeft = 0;
 
         logicBoard.AddEntity(runtime, setup.startPosition.x, setup.startPosition.y);

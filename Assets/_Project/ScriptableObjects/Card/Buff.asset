@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1292160660239bc469727b2c31fb6035, type: 3}
   m_Name: Buff
   m_EditorClassIdentifier: Assembly-CSharp::CardData
-  cardName: 
-  effectType: 0
-  requiredTargetName: 
-  baseCooldown: 0
-  maxUses: 1
-  effectValue1: 0
-  effectValue2: 0
+  cardName: PawnShield
+  effectType: 1
+  requiredTargetName: Pawn
+  baseCooldown: 1
+  maxUses: 2
+  effectValue1: 10
+  effectValue2: 10

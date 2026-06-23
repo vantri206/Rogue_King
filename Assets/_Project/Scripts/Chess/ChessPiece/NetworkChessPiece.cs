@@ -59,7 +59,6 @@ public class NetworkChessPiece : NetworkBehaviour
         currentGridPos = setup.startPosition;
         faction = setup.faction;
         currentHp = setup.pieceData != null ? setup.pieceData.baseHealth : 1;
-        currentSkillCooldown = setup.pieceData != null ? setup.pieceData.baseSkillCooldown : 0;
         silencedTurnsLeft = 0;
         isKing = setup.pieceData != null && setup.pieceData.pieceName.Contains("King");
     }

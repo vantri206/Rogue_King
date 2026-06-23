@@ -130,6 +130,7 @@ public class ServerGameManager : NetworkBehaviour
 
         if (currentGameState == NetGameState.KingTurn)
         {
+            TickPlayerCardCooldowns(chessPlayer);
             TriggerResolvePhase(NetGameState.ChessTurn);
         }
         else if (currentGameState == NetGameState.ChessTurn)
@@ -140,12 +141,23 @@ public class ServerGameManager : NetworkBehaviour
                 phase2TurnCount++;
 
             ServerBoardManager.Instance.TickTurnTimers(ChessFaction.ChessRogue);
-
+            TickPlayerCardCooldowns(kingPlayer);
             TriggerResolvePhase(NetGameState.KingTurn);
         }
     }
 
-
+    private void TickPlayerCardCooldowns(PlayerRef player)
+    {
+        if (player != PlayerRef.None)
+        {
+            var playerObj = Runner.GetPlayerObject(player);
+            if (playerObj != null)
+            {
+                var controller = playerObj.GetComponent<PlayerNetworkController>();
+                if (controller != null) controller.TickCardCooldowns();
+            }
+        }
+    }
     public void BeginManualResolve(NetGameState nextState)
     {
         if (!HasStateAuthority) return;
