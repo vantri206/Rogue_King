@@ -53,76 +53,13 @@ public class PieceContextUI : MonoBehaviour
     {
         if (skillButton == null) return;
 
-        if (data.baseData.activeSkill == SkillType.None)
-        {
-            skillButton.gameObject.SetActive(false);
-            return;
-        }
+
 
         skillButton.gameObject.SetActive(true);
         bool canUseSkill = true;
         string btnText = "USE SKILL";
 
-        if (data.silencedTurnsLeft > 0)
-        {
-            canUseSkill = false;
-            btnText = "SILENCED!";
-        }
-        else if (data.currentSkillCooldown > 0)
-        {
-            canUseSkill = false;
-            btnText = $"CD: {data.currentSkillCooldown}";
-        }
-        else if (data.baseData.activeSkill == SkillType.PawnShield)
-        {
-            if (GameManager.Instance.hasUsedPawnShieldThisTurn)
-            {
-                canUseSkill = false;
-                btnText = "LIMIT REACHED";
-            }
-            else if (data.hasShield)
-            {
-                canUseSkill = false;
-                btnText = "SHIELD ACTIVE";
-            }
-        }
-        else if (data.baseData.activeSkill == SkillType.KingRevive)
-        {
-            if (data.hasUsedRevive)
-            {
-                canUseSkill = false;
-                btnText = "USED!";
-            }
-            else if (GameManager.Instance.graveyard.Find(x => x.faction == data.faction) == null)
-            {
-                canUseSkill = false;
-                btnText = "NO DEAD ALLY";
-            }
-        }
-        else if (data.baseData.activeSkill == SkillType.KingSweep)
-        {
-            if (data.sweepUsesLeft <= 0)
-            {
-                canUseSkill = false;
-                btnText = "OUT OF USES";
-            }
-            else
-            {
-                btnText = $"CÀN QUÉT ({data.sweepUsesLeft})";
-            }
-        }
-        else if (data.baseData.activeSkill == SkillType.KingDash)
-        {
-            if (data.currentSkillCooldown > 0)
-            {
-                canUseSkill = false;
-                btnText = $"CD: {data.currentSkillCooldown}";
-            }
-            else
-            {
-                btnText = "LƯỚT NHANH";
-            }
-        }
+        
 
         skillButton.interactable = canUseSkill;
         if (skillButtonText != null) skillButtonText.text = btnText;

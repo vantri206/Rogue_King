@@ -41,6 +41,7 @@ public class PlayerControl : MonoBehaviour
     private List<Vector2Int> currentAoETiles = new List<Vector2Int>();
 
     private Vector2Int lockedAttackTarget;
+    public bool hasExtraTurn = false;
 
     private void Awake()
     {
@@ -124,24 +125,6 @@ public class PlayerControl : MonoBehaviour
         if (!gameManager.CanPlayerAction(piece.faction)) return;
 
         ChessPieceRuntime data = piece.pieceData;
-
-        switch (data.baseData.activeSkill)
-        {
-            case SkillType.PawnShield:
-                ActivatePawnShield(data);
-                break;
-            case SkillType.BishopSilence:     
-                ActivateBishopSilence(data);
-                break;
-            case SkillType.KingRevive:       
-                ActivateKingRevive(data);
-                break;
-            case SkillType.KingSweep: 
-                break;
-            case SkillType.KingDash: 
-                ActivateKingDash(piece, data);
-                break;
-        }
         pieceContextUI.Show(piece);
     }
     private void ActivateKingRevive(ChessPieceRuntime kingData)
@@ -484,6 +467,33 @@ public class PlayerControl : MonoBehaviour
         if (finishTile.currentPiece != null && finishTile.currentPiece != movingPieceUI)
         {
             Debug.Log($"[PlayerControl] Destroyed piece at {finish}");
+
+            // ---> FIX: XÓA SẠCH DATA TRONG RAM VÀ ĐƯA VÀO NGHĨA TRANG <---
+            ChessPieceRuntime deadData = finishTile.currentPiece.pieceData;
+            if (deadData != null)
+            {
+                // 1. Nhổ cỏ tận gốc trên ma trận logic
+                chessBoard.boardData.RemoveEntity(deadData);
+
+                // 2. Cất vào nghĩa trang
+                if (gameManager != null && gameManager.graveyard != null)
+                {
+                    gameManager.graveyard.Add(new DeadPieceRecord
+                    {
+                        pieceData = deadData.baseData,
+                        faction = deadData.faction,
+                        deathPos = deadData.currentGridPosition
+                    });
+                }
+
+                // 3. Nếu ăn trúng Vua đích thân bằng tay không
+                if (deadData.baseData.pieceName.Contains("King") && gameManager != null)
+                {
+                    gameManager.OnKingDefeated();
+                }
+            }
+            // ------------------------------------------------------------
+
             Destroy(finishTile.currentPiece.gameObject);
         }
 
@@ -507,8 +517,19 @@ public class PlayerControl : MonoBehaviour
         {
             if (movingPieceUI.faction == ChessFaction.ChessRogue)
             {
-                hasMovedThisTurn = true;
-                gameManager.ActionCompleted(true);
+                // ---> SỬA Ở ĐÂY: NẾU ĐANG CÓ BUFF BỨT TỐC THÌ KHÔNG QUA TURN
+                if (hasExtraTurn)
+                {
+                    hasExtraTurn = false;      // Tiêu hao bùa
+                    hasMovedThisTurn = false;  // Reset lại khóa di chuyển để đi tiếp
+                    Debug.Log("🔥 [Bứt Tốc] Đã tiêu hao buff Bứt Tốc! Bạn không bị mất lượt, hãy chọn quân đi tiếp!");
+                    // KHÔNG gọi gameManager.ActionCompleted(true);
+                }
+                else
+                {
+                    hasMovedThisTurn = true;
+                    gameManager.ActionCompleted(true); // Nếu không có bùa thì hết lượt bình thường
+                }
             }
             else
             {
@@ -606,7 +627,11 @@ public class PlayerControl : MonoBehaviour
             for (int y = 0; y < chessBoard.boardHeight; y++)
             {
                 BoardTile tile = chessBoard.GetTileAt(new Vector2Int(x, y));
-                if (tile != null && tile.currentPiece != null && tile.currentPiece.faction == ChessFaction.ChessRogue)
+
+                // ---> THÊM ĐIỀU KIỆN CHỨA CHỮ "King" <---
+                if (tile != null && tile.currentPiece != null &&
+                    tile.currentPiece.faction == ChessFaction.ChessRogue &&
+                    tile.currentPiece.pieceData.baseData.pieceName.Contains("King"))
                 {
                     return tile.currentPiece;
                 }

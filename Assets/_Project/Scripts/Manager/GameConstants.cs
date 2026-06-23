@@ -14,7 +14,7 @@ public enum GamePhase
     Phase2
 }
 
-public enum ChessFaction
+public enum  ChessFaction
 {
     ChessRogue,     // Player 1
     ChessAlliance,  // Player 2
@@ -26,14 +26,17 @@ public enum MovementType
     Slide,  // Can move in a direction until blocked
     Jump    // Can move to specific positions regardless of obstacles
 }
-public enum SkillType
+public enum CardEffectType
 {
     None,
-    PawnShield,     
-    BishopSilence,
-    KingRevive,   
-    QueenGuard,
-    KingSweep,
-    KingDash,  
-    KingCharm
+    PawnShield,         // Khiên Tốt
+    BishopSilence,      // Phán Xét (Cấm skill)
+    KingRevive,         // Hồi Sinh
+    KingSweep,          // Càn Quét
+    KingDash,           // Lướt Nhanh
+    SuperBuff,          // Siêu Buff
+    ExtraTurn,          // Bứt Tốc (Thêm Lượt)
+    March,              // Hành Quân
+    PawnForwardAttack,  // Tốt Ăn Thẳng
+    Recall              // Đánh Úp (Giật ngược)
 }

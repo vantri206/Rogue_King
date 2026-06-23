@@ -196,6 +196,11 @@ public class ChessBoard : MonoBehaviour
         startTile.ClearPiece();
         finishTile.SetPiece(movingPiece);
 
+        if (movingPiece != null)
+        {
+            movingPiece.transform.position = finishTile.transform.position + piecePlacementOffset;
+        }
+
         var entity = boardData.GetEntityAt<ChessPieceRuntime>(start.x, start.y);
         if (entity != null)
         {

@@ -178,26 +178,35 @@ public class CombatManager : SingletonMB<CombatManager>
             Vector2Int pos = deadPiece.currentGridPosition;
 
             // >>> LOGIC SKILL 5: THU PHỤC QUÂN ĐỊCH <<<
-            // Nếu quân bị chết thuộc phe địch VÀ hành động kết liễu diễn ra trong Turn của Rogue
             if (deadPiece.faction == ChessFaction.ChessAlliance && GameManager.Instance.currentTurnFaction == ChessFaction.ChessRogue)
             {
                 Debug.Log($"[Skill Thu Phục] Kẻ địch {deadPiece.baseData.pieceName} đã bị thu phục làm lính che chắn!");
 
-                // 1. Đổi phe dữ liệu trên RAM
                 deadPiece.faction = ChessFaction.ChessRogue;
-                deadPiece.currentHealth = Mathf.RoundToInt(deadPiece.baseData.baseHealth * 0.4f); // Sống lại với 40% HP
+                deadPiece.currentHealth = Mathf.RoundToInt(deadPiece.baseData.baseHealth * 0.4f);
                 if (deadPiece.currentHealth <= 0) deadPiece.currentHealth = 10;
                 deadPiece.isCharmedAlly = true;
+
+                // ---> FIX: BẺ LÁI ĐÔI CHÂN (QUAY ĐẦU 180 ĐỘ) <---
+                for (int i = 0; i < deadPiece.currentMoveDirections.Count; i++)
+                {
+                    deadPiece.currentMoveDirections[i] = new Vector2Int(
+                        -deadPiece.currentMoveDirections[i].x,
+                        -deadPiece.currentMoveDirections[i].y
+                    );
+                }
+
+                // -----------------------------------------------------------
 
                 // 2. Thay đổi màu sắc của View để nhận diện lính ma quỷ/bị điều khiển
                 BoardTile tile = chessBoard.GetTileAt(pos);
                 if (tile != null && tile.currentPiece != null)
                 {
                     var sRenderer = tile.currentPiece.GetComponentInChildren<SpriteRenderer>();
-                    if (sRenderer != null) sRenderer.color = new Color(0.4f, 0.4f, 1f, 1f); // Nhuộm xanh tím làm tay sai
+                    if (sRenderer != null) sRenderer.color = new Color(0.4f, 0.4f, 1f, 1f);
                 }
 
-                continue; // Bỏ qua lệnh xóa bên dưới, cứu quân cờ này sống tiếp!
+                continue;
             }
 
             // --- NẾU KHÔNG THU PHỤC THÌ CHẾT NHƯ BÌNH THƯỜNG ---

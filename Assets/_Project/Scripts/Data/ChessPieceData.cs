@@ -26,7 +26,4 @@ public class ChessPieceData : ScriptableObject
     [Header("Combat Settings")]
     public WeaponData equippedWeapon;
 
-    [Header("Skill Settings")]
-    public SkillType activeSkill = SkillType.None;
-    public int baseSkillCooldown = 0;
 }

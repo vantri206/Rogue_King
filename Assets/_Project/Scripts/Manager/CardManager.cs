@@ -1,123 +1,152 @@
-using System.Collections.Generic;
 using UnityEngine;
-
-public enum CardType
-{
-    SieuBuff,
-    ButToc,
-    HanhQuan,
-    TotAnThang,
-    DanhUp
-}
 
 public class CardManager : SingletonMB<CardManager>
 {
-    [ContextMenu("TEST: Kích hoạt Tốt Ăn Thẳng")]
-    public void TestTotAnThang() => ActivateCard(CardType.TotAnThang);
-
-    [ContextMenu("TEST: Kích hoạt Bứt Tốc")]
-    public void TestButToc() => ActivateCard(CardType.ButToc);
-    [Header("References")]
     [SerializeField] private ChessBoard chessBoard;
     [SerializeField] private PlayerControl playerControl;
 
-    // Bộ đếm số lần xài chiêu Đánh Úp (Giới hạn 2 lượt/trận)
-    private int recallUsesLeft = 2;
-
-    // HÀM KÍCH HOẠT HIỆU ỨNG THẺ BÀI
-    public void ActivateCard(CardType card, ChessPieceRuntime targetPiece = null)
+    public void ActivateCard(CardInstance cardInstance, ChessPieceRuntime targetPiece = null)
     {
-        ChessFaction myFaction = ChessFaction.ChessRogue; // Mặc định áp dụng cho phe người chơi điều khiển
-
-        switch (card)
+        if (!PlayerInventory.Instance.CanUseCard(cardInstance))
         {
-            // 1. SIÊU BUFF: Không tốn lượt, tăng mạnh chỉ số thực thể được chọn
-            case CardType.SieuBuff:
+            Debug.LogWarning($"[Card] Thẻ {cardInstance.data.cardName} chưa sẵn sàng (CD: {cardInstance.currentCooldown}, Uses: {cardInstance.remainingUses})");
+            return;
+        }
+
+        CardData data = cardInstance.data;
+        ChessFaction myFaction = ChessFaction.ChessRogue;
+
+        // Kiểm tra điều kiện mục tiêu bằng String
+        if (targetPiece != null && !string.IsNullOrEmpty(data.requiredTargetName))
+        {
+            if (!targetPiece.baseData.pieceName.Contains(data.requiredTargetName))
+            {
+                Debug.LogWarning($"[Card] Thẻ này chỉ được dùng lên quân cờ có tên chứa chữ '{data.requiredTargetName}'!");
+                return;
+            }
+        }
+
+        bool isCardSuccessfullyPlayed = true;
+
+        switch (data.effectType)
+        {
+            case CardEffectType.PawnShield:
+                if (targetPiece != null) targetPiece.hasShield = true;
+                break;
+
+            case CardEffectType.BishopSilence:
+                ChessPieceRuntime enemyKing = FindEnemyKing(myFaction);
+                if (enemyKing != null) enemyKing.silencedTurnsLeft = data.effectValue1 > 0 ? data.effectValue1 : 1;
+                break;
+
+            case CardEffectType.KingRevive:
+                isCardSuccessfullyPlayed = ActivateKingRevive(myFaction);
+                break;
+
+            case CardEffectType.KingDash:
+                int dashRange = data.effectValue1 > 0 ? data.effectValue1 : 3;
+                isCardSuccessfullyPlayed = TriggerKingMovementSkill(targetPiece, dashRange, isSweep: false);
+                break;
+
+            case CardEffectType.KingSweep:
+                isCardSuccessfullyPlayed = TriggerKingMovementSkill(targetPiece, 99, isSweep: true);
+                break;
+
+            case CardEffectType.SuperBuff:
                 if (targetPiece != null)
                 {
-                    targetPiece.isSuperBuffed = true;
-                    targetPiece.currentAttack += 50;                     // Tăng Dame
-                    targetPiece.currentHealth += 150;                    // Tăng HP hiện tại
-                    targetPiece.baseData.baseHealth += 150;              // Tăng HP tối đa
-                    Debug.Log($"[Card] Siêu Buff lên {targetPiece.baseData.pieceName}! ATK +50, HP +150.");
+                    targetPiece.currentAttack += data.effectValue1;
+                    targetPiece.baseData.baseHealth += data.effectValue2;
+                    targetPiece.currentHealth += data.effectValue2;
+                    Debug.Log($"[Card] Super Buff! ATK +{data.effectValue1}, HP +{data.effectValue2}.");
                 }
                 break;
 
-            // 2. BỨT TỐC: Không tốn lượt, hồi lại quyền di chuyển ngay lập tức
-            case CardType.ButToc:
-                // Truy cập vào PlayerControl thông qua Reflection để gán lại quyền di chuyển không tốn lượt
-                var fieldMoved = playerControl.GetType().GetField("hasMovedThisTurn", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (fieldMoved != null)
-                {
-                    fieldMoved.SetValue(playerControl, false); // Trả quyền đi về false để đi tiếp
-                    Debug.Log("[Card] Kích hoạt Bứt Tốc! Bạn được tặng thêm 1 lượt hành động tự do.");
-                }
+            case CardEffectType.ExtraTurn:
+                playerControl.hasExtraTurn = true;
                 break;
 
-            // 3. HÀNH QUÂN: Buff máu tối đa và tăng tầm chạy (+2 ô) cho toàn bộ lính Tốt phe ta
-            case CardType.HanhQuan:
-                ForEachFriendlyPiece(myFaction, (piece) => {
-                    if (piece.baseData.pieceName.Contains("Pawn"))
-                    {
-                        piece.currentMoveRange += 2; // Tăng tầm di chuyển hành quân
-                        piece.currentHealth += 100;   // Tăng máu cường hóa đoàn quân
-                        piece.baseData.baseHealth += 100;
-                    }
+            case CardEffectType.March:
+                ForEachFriendlyPiece(myFaction, "Pawn", (piece) => {
+                    piece.currentMoveRange += data.effectValue1;
+                    piece.baseData.baseHealth += data.effectValue2;
+                    piece.currentHealth += data.effectValue2;
                 });
-                Debug.Log("[Card] Kích hoạt Hành Quân! Toàn bộ quân Tốt tăng tốc và tăng HP.");
                 break;
 
-            // 4. TỐT ĂN THẲNG: Mở khóa khả năng tấn công trực diện cho toàn bộ quân Tốt phe ta
-            case CardType.TotAnThang:
-                ForEachFriendlyPiece(myFaction, (piece) => {
-                    if (piece.baseData.pieceName.Contains("Pawn"))
-                    {
-                        piece.canAttackStraight = true;
-                    }
+            case CardEffectType.PawnForwardAttack:
+                ForEachFriendlyPiece(myFaction, "Pawn", (piece) => {
+                    piece.canAttackStraight = true;
                 });
-                Debug.Log("[Card] Kích hoạt Tốt Ăn Thẳng! Đoàn quân Tốt có thể ăn quân phía trước mặt.");
                 break;
 
-            // 5. ĐÁNH ÚP (RECALL): Giật ngược thời gian 1 quân cờ về vị trí ở lượt trước (Tối đa 2 lần/trận)
-            case CardType.DanhUp:
-                if (recallUsesLeft <= 0)
-                {
-                    Debug.LogWarning("[Card] Chiêu Đánh Úp đã hết số lần sử dụng trong trận này!");
-                    return;
-                }
+            case CardEffectType.Recall:
                 if (targetPiece != null)
                 {
-                    Vector2Int oldPos = targetPiece.currentGridPosition;
                     Vector2Int targetPos = targetPiece.previousGridPosition;
-
-                    // Kiểm tra xem ô lịch sử đó hiện tại có đang bị ai chiếm chỗ không
                     if (chessBoard.boardData.IsTileEmptyForMovement(targetPos.x, targetPos.y))
-                    {
-                        chessBoard.MovePieceOnBoard(oldPos, targetPos); // Bứng quân cờ về quá khứ
-                        recallUsesLeft--;
-                        Debug.Log($"[Card] Đánh Úp thành công! Giật ngược {targetPiece.baseData.pieceName} về {targetPos}. Còn lại: {recallUsesLeft} lần.");
-                    }
+                        chessBoard.MovePieceOnBoard(targetPiece.currentGridPosition, targetPos);
                     else
-                    {
-                        Debug.LogWarning("[Card] Không thể Đánh Úp vì ô cờ quá khứ đang bị vật cản chiếm chỗ!");
-                    }
+                        isCardSuccessfullyPlayed = false;
                 }
                 break;
         }
 
-        // Làm mới lại toàn bộ các ô hiển thị màu trên bàn cờ để cập nhật theo luật mới
-        chessBoard.ResetAllTileHighlights();
+        if (isCardSuccessfullyPlayed)
+        {
+            PlayerInventory.Instance.ConsumeCard(cardInstance);
+            chessBoard.ResetAllTileHighlights();
+        }
     }
 
-    // Hàm bổ trợ duyệt nhanh toàn bộ quân cờ cùng phe trên bàn cờ RAM
-    private void ForEachFriendlyPiece(ChessFaction faction, System.Action<ChessPieceRuntime> action)
+    // --- CÁC HÀM BỔ TRỢ ---
+    private bool ActivateKingRevive(ChessFaction myFaction)
+    {
+        var graveyard = GameManager.Instance.graveyard;
+        for (int i = graveyard.Count - 1; i >= 0; i--)
+        {
+            if (graveyard[i].faction == myFaction && chessBoard.boardData.IsTileEmptyForMovement(graveyard[i].deathPos.x, graveyard[i].deathPos.y))
+            {
+                ChessPiece tempPrefab = playerControl.GetType().GetField("selectedPiece", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(playerControl) as ChessPiece;
+                chessBoard.SpawnPiece(graveyard[i].pieceData, tempPrefab, graveyard[i].deathPos, myFaction);
+                graveyard.RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool TriggerKingMovementSkill(ChessPieceRuntime kingData, int range, bool isSweep)
+    {
+        if (kingData == null || !kingData.baseData.pieceName.Contains("King")) return false;
+        Debug.Log($"[Card] Wait for player to aim... (Range: {range}, IsSweep: {isSweep})");
+        return true;
+    }
+
+    private ChessPieceRuntime FindEnemyKing(ChessFaction myFaction)
     {
         for (int x = 0; x < chessBoard.boardWidth; x++)
         {
             for (int y = 0; y < chessBoard.boardHeight; y++)
             {
                 var piece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(x, y);
-                if (piece != null && piece.faction == faction)
+                if (piece != null && piece.faction != myFaction && piece.baseData.pieceName.Contains("King"))
+                {
+                    return piece;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void ForEachFriendlyPiece(ChessFaction faction, string requiredNamePart, System.Action<ChessPieceRuntime> action)
+    {
+        for (int x = 0; x < chessBoard.boardWidth; x++)
+        {
+            for (int y = 0; y < chessBoard.boardHeight; y++)
+            {
+                var piece = chessBoard.boardData.GetEntityAt<ChessPieceRuntime>(x, y);
+                if (piece != null && piece.faction == faction && (string.IsNullOrEmpty(requiredNamePart) || piece.baseData.pieceName.Contains(requiredNamePart)))
                 {
                     action?.Invoke(piece);
                 }
