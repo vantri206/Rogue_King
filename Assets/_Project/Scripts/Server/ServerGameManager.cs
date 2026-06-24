@@ -24,6 +24,7 @@ public class ServerGameManager : NetworkBehaviour
     public bool hasUsedPawnShieldThisTurn { get; set; } = false;
 
     private bool manualResolveInProgress;
+    private bool matchResultRecorded;
 
     [Header("Settings")]
     [SerializeField] private float visualResolveTime = 1.5f;
@@ -38,6 +39,7 @@ public class ServerGameManager : NetworkBehaviour
             phase1TurnCount = 0;
             phase2TurnCount = 0;
             currentPhase = GamePhase.Phase1;
+            matchResultRecorded = false;
             ChangeState(NetGameState.Init);
         }
     }
@@ -48,6 +50,7 @@ public class ServerGameManager : NetworkBehaviour
 
         kingPlayer = p1;
         chessPlayer = p2;
+        matchResultRecorded = false;
 
         Debug.Log($"[Server] Assigned Roles - King: {p1}, Chess: {p2}");
     }
@@ -211,12 +214,21 @@ public class ServerGameManager : NetworkBehaviour
         if (ServerCombatManager.Instance != null)
             ServerCombatManager.Instance.CancelPendingAttackResolution();
 
+        PlayerRef winner = PlayerRef.None;
+        if (player == kingPlayer)
+            winner = chessPlayer;
+        else if (player == chessPlayer)
+            winner = kingPlayer;
+
+        if (winner != PlayerRef.None)
+            RecordMatchResult(winner, player, "forfeit_disconnect");
+
         manualResolveInProgress = false;
         actionDelayTimer = TickTimer.None;
         nextStateAfterResolve = NetGameState.GameOver;
         currentGameState = NetGameState.GameOver;
 
-        Debug.Log($"[Server] Match aborted because {player} left. Session is locked until the room is empty.");
+        Debug.Log($"[Server] Match aborted because {player} left. Winner by forfeit={winner}. Session is locked until the room is empty.");
     }
 
     public void ResetToLobby()
@@ -234,6 +246,7 @@ public class ServerGameManager : NetworkBehaviour
         phase1TurnCount = 0;
         phase2TurnCount = 0;
         currentPhase = GamePhase.Phase1;
+        matchResultRecorded = false;
         kingPlayer = PlayerRef.None;
         chessPlayer = PlayerRef.None;
         manualResolveInProgress = false;
@@ -246,18 +259,41 @@ public class ServerGameManager : NetworkBehaviour
 
     private void DetermineWinner()
     {
+        // At Phase 2, roles have already been swapped:
+        // - current chessPlayer was the original Phase 1 King.
+        // - current kingPlayer is the Phase 2 King.
         if (phase1TurnCount < phase2TurnCount)
         {
-            Debug.Log("[Server] Player 1 (King in Phase 1) WINS!");
+            PlayerRef winner = chessPlayer;
+            PlayerRef loser = kingPlayer;
+            Debug.Log($"[Server] Player 1 / Phase 1 King WINS! Winner={winner}, Loser={loser}");
+            RecordMatchResult(winner, loser, "game_over_phase_score");
         }
         else if (phase2TurnCount < phase1TurnCount)
         {
-            Debug.Log("[Server] Player 2 (King in Phase 2) WINS!");
+            PlayerRef winner = kingPlayer;
+            PlayerRef loser = chessPlayer;
+            Debug.Log($"[Server] Player 2 / Phase 2 King WINS! Winner={winner}, Loser={loser}");
+            RecordMatchResult(winner, loser, "game_over_phase_score");
         }
         else
         {
-            Debug.Log("[Server] Match DRAW!");
+            Debug.Log("[Server] Match DRAW! Elo is unchanged in this patch.");
         }
+    }
+
+    private void RecordMatchResult(PlayerRef winner, PlayerRef loser, string reason)
+    {
+        if (!HasStateAuthority) return;
+        if (matchResultRecorded) return;
+        if (winner == PlayerRef.None || loser == PlayerRef.None || winner == loser) return;
+
+        matchResultRecorded = true;
+
+        if (ServerLeaderboardManager.Instance != null)
+            ServerLeaderboardManager.Instance.ApplyMatchResult(winner, loser, reason);
+        else
+            Debug.LogWarning("[Server] ServerLeaderboardManager missing. Match result was not saved to leaderboard.json.");
     }
 
     private void OnStateChanged() { }

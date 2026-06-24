@@ -47,9 +47,18 @@ public class NetworkChessPiece : NetworkBehaviour
 
     private void Update()
     {
-        if (cachedPieceData == null && pieceDataIndex >= 0)
+        try
         {
-            ApplyVisualsFromPieceData();
+            if (cachedPieceData == null && pieceDataIndex >= 0)
+            {
+                ApplyVisualsFromPieceData();
+            }
+        }
+        catch (System.InvalidOperationException)
+        {
+            // The object can briefly exist on the client before Fusion has called Spawned(),
+            // or while it is being despawned. Networked properties are not readable then.
+            // Visuals will be applied again after the object is properly spawned/synced.
         }
     }
 

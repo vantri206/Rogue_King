@@ -35,11 +35,23 @@ public class PlayerNetworkController : NetworkBehaviour
     [Header("Piece Context UI")]
     [SerializeField] private PieceContextUI pieceContextUI;
 
+    [Header("Player Profile")]
+    [Tooltip("AvatarId is assigned by the server from GuestId. Keep this synced with AvatarCatalog size - 1.")]
+    [SerializeField] private int maxAvatarId = 7;
+
+    [Networked] public NetworkString<_64> GuestId { get; set; }
+    [Networked] public NetworkString<_32> DisplayName { get; set; }
+    [Networked] public int AvatarId { get; set; }
+    [Networked] public int Elo { get; set; }
+    [Networked] public int LastEloDelta { get; set; }
+    [Networked] public NetworkBool IsProfileReady { get; set; }
+
     [Header("Debug")]
     [SerializeField] private bool debugInputLogs = true;
 
     private static PlayerNetworkController activeLocalInputController;
     private bool localInputEnabled;
+    private bool localProfileSubmitted;
 
     private ClientInputState currentState = ClientInputState.Idle;
 
@@ -80,6 +92,7 @@ public class PlayerNetworkController : NetworkBehaviour
         if (!TryAcquireLocalInput())
             return;
 
+        TrySubmitLocalProfileToServer();
         ResolveSceneReferences();
         InitializeWeaponUIIfPossible();
 
@@ -140,6 +153,7 @@ public class PlayerNetworkController : NetworkBehaviour
             activeLocalInputController = null;
 
         localInputEnabled = false;
+        localProfileSubmitted = false;
     }
 
     private bool IsLocalInputActive()
@@ -147,10 +161,308 @@ public class PlayerNetworkController : NetworkBehaviour
         return HasInputAuthority && localInputEnabled && activeLocalInputController == this;
     }
 
+    private void TrySubmitLocalProfileToServer()
+    {
+        if (!HasInputAuthority || localProfileSubmitted)
+            return;
+
+        PlayerLocalProfile profile = PlayerLocalProfile.LoadOrCreate(maxAvatarId + 1);
+        // AvatarId is intentionally not trusted. The server assigns it from GuestId.
+        Rpc_SubmitPlayerProfile(profile.GuestId, profile.DisplayName, 0);
+        localProfileSubmitted = true;
+
+        if (debugInputLogs)
+        {
+            Debug.Log($"[Client Profile] Submitted profile GuestId={profile.GuestId}, Name={profile.DisplayName}. Avatar will be assigned by server.");
+        }
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    public void Rpc_SubmitPlayerProfile(NetworkString<_64> guestId, NetworkString<_32> displayName, int avatarId, RpcInfo info = default)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        string sanitizedGuestId = SanitizeGuestId(guestId.ToString(), info.Source);
+        string sanitizedName = SanitizeDisplayName(displayName.ToString(), info.Source);
+        int safeAvatarId = GetServerAssignedAvatarId(sanitizedGuestId);
+        int safeElo = 1000;
+
+        if (ServerLeaderboardManager.Instance != null)
+        {
+            LeaderboardEntryData entry = ServerLeaderboardManager.Instance.RegisterOrUpdatePlayer(info.Source, sanitizedGuestId, sanitizedName, safeAvatarId);
+            if (entry != null)
+            {
+                sanitizedGuestId = entry.guestId;
+                sanitizedName = entry.displayName;
+                safeAvatarId = entry.avatarId;
+                safeElo = entry.elo;
+            }
+        }
+        else
+        {
+            sanitizedName = ResolveFallbackServerName(sanitizedName, sanitizedGuestId, info.Source);
+        }
+
+        GuestId = sanitizedGuestId;
+        DisplayName = sanitizedName;
+        AvatarId = safeAvatarId;
+        Elo = Mathf.Max(0, safeElo);
+        LastEloDelta = 0;
+        IsProfileReady = true;
+
+        if (ServerLeaderboardManager.Instance != null)
+            ServerLeaderboardManager.Instance.PushLeaderboardToAllActivePlayers();
+
+        if (debugInputLogs)
+        {
+            Debug.Log($"[Server Profile] Player={info.Source} GuestId={sanitizedGuestId}, Name={sanitizedName}, ServerAvatarId={safeAvatarId}, Elo={Elo}");
+        }
+    }
+
+    public void ServerSetElo(int elo, int delta)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        Elo = Mathf.Max(0, elo);
+        LastEloDelta = delta;
+    }
+
+    public void ServerPushLeaderboardSnapshot(IReadOnlyList<LeaderboardEntryData> topEntries)
+    {
+        if (!HasStateAuthority || topEntries == null)
+            return;
+
+        Rpc_ClearLeaderboardSnapshot();
+
+        int count = Mathf.Min(10, topEntries.Count);
+        for (int i = 0; i < count; i++)
+        {
+            LeaderboardEntryData entry = topEntries[i];
+            if (entry == null)
+                continue;
+
+            string safeName = string.IsNullOrWhiteSpace(entry.displayName) ? $"Player {i + 1:00}" : entry.displayName;
+            if (safeName.Length > 24)
+                safeName = safeName.Substring(0, 24);
+
+            string safeGuestId = string.IsNullOrWhiteSpace(entry.guestId) ? $"rank_{i + 1}" : entry.guestId;
+            if (safeGuestId.Length > 64)
+                safeGuestId = safeGuestId.Substring(0, 64);
+
+            Rpc_ReceiveLeaderboardEntry(
+                i + 1,
+                safeGuestId,
+                safeName,
+                Mathf.Max(0, entry.avatarId),
+                Mathf.Max(0, entry.elo),
+                Mathf.Max(0, entry.wins),
+                Mathf.Max(0, entry.losses),
+                Mathf.Max(0, entry.draws),
+                Mathf.Max(0, entry.totalMatches));
+        }
+
+        Rpc_CompleteLeaderboardSnapshot();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void Rpc_ClearLeaderboardSnapshot()
+    {
+        ClientLeaderboardCache.BeginSnapshot();
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void Rpc_ReceiveLeaderboardEntry(int rank, NetworkString<_64> guestId, NetworkString<_32> displayName, int avatarId, int elo, int wins, int losses, int draws, int totalMatches)
+    {
+        ClientLeaderboardCache.AddOrUpdateEntry(rank, guestId.ToString(), displayName.ToString(), avatarId, elo, wins, losses, draws, totalMatches);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void Rpc_CompleteLeaderboardSnapshot()
+    {
+        ClientLeaderboardCache.CompleteSnapshotAndSave();
+    }
+
+
+    public void ClientRequestFindMatchFromLobby()
+    {
+        if (!HasInputAuthority)
+            return;
+
+        Rpc_RequestFindMatchFromLobby();
+    }
+
+    public void ClientRequestLeaderboardRefresh()
+    {
+        if (!HasInputAuthority)
+            return;
+
+        Rpc_RequestLeaderboardRefresh();
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_RequestFindMatchFromLobby(RpcInfo info = default)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (NetworkRunnerHandler.Active != null)
+            NetworkRunnerHandler.Active.ServerPlayerRequestedLobbyMatch(info.Source);
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_RequestLeaderboardRefresh(RpcInfo info = default)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (NetworkRunnerHandler.Active != null)
+            NetworkRunnerHandler.Active.ServerPlayerRequestedLeaderboardRefresh(info.Source);
+    }
+
+    public void ServerSendLobbyMatchFound(string matchSessionName)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        string safeSession = string.IsNullOrWhiteSpace(matchSessionName) ? "RogueKingRoom" : matchSessionName.Trim();
+        if (safeSession.Length > 32)
+            safeSession = safeSession.Substring(0, 32);
+
+        Rpc_LobbyMatchFound(safeSession);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void Rpc_LobbyMatchFound(NetworkString<_32> matchSessionName)
+    {
+        string session = matchSessionName.ToString();
+        if (NetworkRunnerHandler.Active != null)
+            NetworkRunnerHandler.Active.ClientSwitchFromLobbyToMatchSession(session);
+    }
+
+    private static string ResolveFallbackServerName(string sanitizedName, string guestId, PlayerRef source)
+    {
+        if (!string.IsNullOrWhiteSpace(sanitizedName) && !LooksLikeGeneratedName(sanitizedName))
+            return sanitizedName;
+
+        int number = 1000 + (GetStablePositiveHash(string.IsNullOrWhiteSpace(guestId) ? $"player_{source.PlayerId}" : guestId) % 9000);
+        return $"Player {number}";
+    }
+
+    private static bool LooksLikeGeneratedName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        value = value.Trim();
+        return value.StartsWith("Guest_", System.StringComparison.OrdinalIgnoreCase)
+               || value.StartsWith("Guest ", System.StringComparison.OrdinalIgnoreCase)
+               || value.StartsWith("Player_", System.StringComparison.OrdinalIgnoreCase)
+               || value.StartsWith("Player ", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int GetStablePositiveHash(string value)
+    {
+        unchecked
+        {
+            int hash = 23;
+            if (string.IsNullOrEmpty(value))
+                value = "kingonline";
+
+            for (int i = 0; i < value.Length; i++)
+                hash = hash * 31 + value[i];
+
+            return hash & int.MaxValue;
+        }
+    }
+
+    private int GetServerAssignedAvatarId(string guestId)
+    {
+        int avatarCount = Mathf.Max(1, maxAvatarId + 1);
+
+        if (string.IsNullOrWhiteSpace(guestId))
+            return 0;
+
+        unchecked
+        {
+            int hash = 23;
+            for (int i = 0; i < guestId.Length; i++)
+                hash = hash * 31 + guestId[i];
+
+            return (hash & int.MaxValue) % avatarCount;
+        }
+    }
+
+    private static string SanitizeGuestId(string rawGuestId, PlayerRef source)
+    {
+        string value = string.IsNullOrWhiteSpace(rawGuestId)
+            ? $"guest_{source.PlayerId}"
+            : rawGuestId.Trim();
+
+        value = value.Replace("\n", string.Empty).Replace("\r", string.Empty).Replace("\t", string.Empty);
+
+        if (value.Length > 64)
+            value = value.Substring(0, 64);
+
+        if (string.IsNullOrWhiteSpace(value))
+            value = $"guest_{source.PlayerId}";
+
+        return value;
+    }
+
+    private static string SanitizeDisplayName(string rawDisplayName, PlayerRef source)
+    {
+        string value = string.IsNullOrWhiteSpace(rawDisplayName)
+            ? $"Guest_{source.PlayerId:0000}"
+            : rawDisplayName.Trim();
+
+        value = value.Replace("\n", " ").Replace("\r", " ").Replace("\t", " ");
+
+        while (value.Contains("  "))
+            value = value.Replace("  ", " ");
+
+        if (value.Length > 24)
+            value = value.Substring(0, 24);
+
+        if (string.IsNullOrWhiteSpace(value))
+            value = $"Guest_{source.PlayerId:0000}";
+
+        return value;
+    }
+
+    public string GetGuestIdOrFallback()
+    {
+        string value = GuestId.ToString();
+        return string.IsNullOrWhiteSpace(value) ? $"guest_{Object.InputAuthority.PlayerId}" : value;
+    }
+
+    public string GetDisplayNameOrFallback()
+    {
+        string value = DisplayName.ToString();
+        return string.IsNullOrWhiteSpace(value) ? $"Player {Object.InputAuthority.PlayerId}" : value;
+    }
+
+    public int GetAvatarIdOrDefault()
+    {
+        return Mathf.Max(0, AvatarId);
+    }
+
+    public int GetEloOrDefault()
+    {
+        return Elo > 0 ? Elo : 1000;
+    }
+
+    public int GetLastEloDelta()
+    {
+        return LastEloDelta;
+    }
+
     private void Update()
     {
         if (!IsLocalInputActive()) return;
 
+        TrySubmitLocalProfileToServer();
         ResolveSceneReferences();
         InitializeWeaponUIIfPossible();
         UpdateLocalRoleAndTurnUI();
@@ -179,6 +491,44 @@ public class PlayerNetworkController : NetworkBehaviour
         if (HasStateAuthority && !deckInitializedOnServer)
         {
             TryInitializeDeckOnServer();
+        }
+    }
+
+    private struct NetworkPieceSnapshot
+    {
+        public Vector2Int GridPos;
+        public int CurrentHp;
+        public int CurrentSkillCooldown;
+        public int SilencedTurnsLeft;
+        public int PieceDataIndex;
+        public ChessFaction Faction;
+        public bool IsKing;
+    }
+
+    private bool TryGetNetworkPieceSnapshot(NetworkChessPiece piece, out NetworkPieceSnapshot snapshot)
+    {
+        snapshot = default;
+
+        if (piece == null || !piece.isActiveAndEnabled)
+            return false;
+
+        try
+        {
+            snapshot.GridPos = piece.currentGridPos;
+            snapshot.CurrentHp = piece.currentHp;
+            snapshot.CurrentSkillCooldown = piece.currentSkillCooldown;
+            snapshot.SilencedTurnsLeft = piece.silencedTurnsLeft;
+            snapshot.PieceDataIndex = piece.pieceDataIndex;
+            snapshot.Faction = piece.faction;
+            snapshot.IsKing = piece.isKing;
+            return true;
+        }
+        catch (System.InvalidOperationException)
+        {
+            // Fusion throws this when a NetworkBehaviour exists in the scene hierarchy
+            // but Spawned() has not been called yet, or when it is already being despawned.
+            // Client-side hover/preview code can safely ignore that transient object.
+            return false;
         }
     }
 
@@ -456,7 +806,12 @@ public class PlayerNetworkController : NetworkBehaviour
             if (!CanLocalPlayerControlPiece(targetPiece))
             {
                 if (debugInputLogs)
-                    Debug.Log($"[Client Input] Ignored piece at {cellPos}: cannot control faction={targetPiece.faction} on state={ServerGameManager.Instance.currentGameState}.");
+                {
+                    string factionText = TryGetNetworkPieceSnapshot(targetPiece, out NetworkPieceSnapshot blockedSnapshot)
+                        ? blockedSnapshot.Faction.ToString()
+                        : "Unknown/NotSpawned";
+                    Debug.Log($"[Client Input] Ignored piece at {cellPos}: cannot control faction={factionText} on state={ServerGameManager.Instance.currentGameState}.");
+                }
                 return;
             }
 
@@ -488,8 +843,17 @@ public class PlayerNetworkController : NetworkBehaviour
     {
         ResolveSceneReferences();
 
+        if (!TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot pieceSnapshot))
+        {
+            if (debugInputLogs)
+                Debug.Log("[Client Input] Ignored drag start: selected NetworkChessPiece is not spawned/ready yet.");
+            selectedPiece = null;
+            currentState = ClientInputState.Idle;
+            return;
+        }
+
         selectedPiece = piece;
-        selectedFromPos = piece.currentGridPos;
+        selectedFromPos = pieceSnapshot.GridPos;
         currentState = ClientInputState.DraggingPiece;
 
         HidePieceContextUI();
@@ -514,12 +878,12 @@ public class PlayerNetworkController : NetworkBehaviour
 
         if (ghostPiece != null)
         {
-            ChessPieceRuntime ghostRuntime = CreateRuntimeFromNetworkPiece(piece);
+            ChessPieceRuntime ghostRuntime = CreateRuntimeFromNetworkPiece(piece, pieceSnapshot);
             if (ghostRuntime != null)
             {
                 ghostPiece.Initialize(ghostRuntime);
                 ghostPiece.transform.position = chessBoard != null
-                    ? chessBoard.GetPieceWorldPosition(piece.currentGridPos)
+                    ? chessBoard.GetPieceWorldPosition(pieceSnapshot.GridPos)
                     : piece.transform.position;
             }
         }
@@ -527,7 +891,7 @@ public class PlayerNetworkController : NetworkBehaviour
         piece.SetLocalVisualVisible(false);
 
         if (debugInputLogs)
-            Debug.Log($"[Client Input] Started dragging {piece.faction} piece from {selectedFromPos}. ValidMoves={currentValidMoves.Count}");
+            Debug.Log($"[Client Input] Started dragging {pieceSnapshot.Faction} piece from {selectedFromPos}. ValidMoves={currentValidMoves.Count}");
     }
 
     private void UpdateDragVisuals()
@@ -828,7 +1192,8 @@ public class PlayerNetworkController : NetworkBehaviour
         NetworkChessPiece kingPiece = FindRogueKingPiece();
         BoardData previewBoard = BuildClientPreviewBoard(out _);
 
-        if (activeWeapon == null || kingPiece == null || previewBoard == null)
+        if (activeWeapon == null || kingPiece == null || previewBoard == null ||
+            !TryGetNetworkPieceSnapshot(kingPiece, out NetworkPieceSnapshot kingSnapshot))
         {
             Debug.LogWarning($"[Client Input] Cannot start aiming attack. weapon={activeWeapon}, king={kingPiece}, previewBoard={previewBoard}");
             currentState = ClientInputState.Idle;
@@ -839,7 +1204,7 @@ public class PlayerNetworkController : NetworkBehaviour
         lockedAttackTarget = new Vector2Int(-1, -1);
         currentAoETiles.Clear();
         currentValidAttacks.Clear();
-        currentValidAttacks.AddRange(ActionResolver.GetTargetingRange(activeWeapon, kingPiece.currentGridPos, previewBoard));
+        currentValidAttacks.AddRange(ActionResolver.GetTargetingRange(activeWeapon, kingSnapshot.GridPos, previewBoard));
 
         ShowHighlightTiles(currentValidAttacks, TileState.AttackRange);
         currentState = ClientInputState.AimingAttack;
@@ -876,11 +1241,12 @@ public class PlayerNetworkController : NetworkBehaviour
         NetworkChessPiece kingPiece = FindRogueKingPiece();
         BoardData previewBoard = BuildClientPreviewBoard(out _);
 
-        if (activeWeapon == null || kingPiece == null || previewBoard == null)
+        if (activeWeapon == null || kingPiece == null || previewBoard == null ||
+            !TryGetNetworkPieceSnapshot(kingPiece, out NetworkPieceSnapshot kingSnapshot))
             return;
 
         currentAoETiles.Clear();
-        currentAoETiles.AddRange(ActionResolver.GetAoE(activeWeapon, kingPiece.currentGridPos, lockedAttackTarget, previewBoard));
+        currentAoETiles.AddRange(ActionResolver.GetAoE(activeWeapon, kingSnapshot.GridPos, lockedAttackTarget, previewBoard));
 
         ShowHighlightTiles(currentValidAttacks, TileState.AttackRange);
         ShowHighlightTiles(currentAoETiles, TileState.AttackTarget);
@@ -944,18 +1310,19 @@ public class PlayerNetworkController : NetworkBehaviour
     private bool CanLocalPlayerControlPiece(NetworkChessPiece piece)
     {
         if (piece == null || ServerGameManager.Instance == null) return false;
+        if (!TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot pieceSnapshot)) return false;
 
         PlayerRef me = Object.InputAuthority;
         NetGameState state = ServerGameManager.Instance.currentGameState;
 
         if (state == NetGameState.KingTurn)
         {
-            return ServerGameManager.Instance.kingPlayer == me && piece.faction == ChessFaction.ChessRogue;
+            return ServerGameManager.Instance.kingPlayer == me && pieceSnapshot.Faction == ChessFaction.ChessRogue;
         }
 
         if (state == NetGameState.ChessTurn)
         {
-            return ServerGameManager.Instance.chessPlayer == me && piece.faction == ChessFaction.ChessAlliance;
+            return ServerGameManager.Instance.chessPlayer == me && pieceSnapshot.Faction == ChessFaction.ChessAlliance;
         }
 
         return false;
@@ -967,7 +1334,7 @@ public class PlayerNetworkController : NetworkBehaviour
 
         foreach (NetworkChessPiece piece in pieces)
         {
-            if (piece != null && piece.currentGridPos == gridPos)
+            if (TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot pieceSnapshot) && pieceSnapshot.GridPos == gridPos)
                 return piece;
         }
 
@@ -980,7 +1347,9 @@ public class PlayerNetworkController : NetworkBehaviour
 
         foreach (NetworkChessPiece piece in pieces)
         {
-            if (piece != null && piece.isKing && piece.faction == ChessFaction.ChessRogue)
+            if (TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot pieceSnapshot) &&
+                pieceSnapshot.IsKing &&
+                pieceSnapshot.Faction == ChessFaction.ChessRogue)
                 return piece;
         }
 
@@ -1013,16 +1382,17 @@ public class PlayerNetworkController : NetworkBehaviour
 
         foreach (NetworkChessPiece piece in pieces)
         {
-            if (piece == null) continue;
+            if (!TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot pieceSnapshot))
+                continue;
 
-            ChessPieceRuntime runtime = CreateRuntimeFromNetworkPiece(piece);
+            ChessPieceRuntime runtime = CreateRuntimeFromNetworkPiece(piece, pieceSnapshot);
             if (runtime == null) continue;
 
-            runtime.currentHealth = piece.currentHp;
-            runtime.currentSkillCooldown = piece.currentSkillCooldown;
-            runtime.silencedTurnsLeft = piece.silencedTurnsLeft;
+            runtime.currentHealth = pieceSnapshot.CurrentHp;
+            runtime.currentSkillCooldown = pieceSnapshot.CurrentSkillCooldown;
+            runtime.silencedTurnsLeft = pieceSnapshot.SilencedTurnsLeft;
 
-            previewBoard.AddEntity(runtime, piece.currentGridPos.x, piece.currentGridPos.y);
+            previewBoard.AddEntity(runtime, pieceSnapshot.GridPos.x, pieceSnapshot.GridPos.y);
 
             if (piece == selectedPiece)
                 selectedRuntime = runtime;
@@ -1033,16 +1403,35 @@ public class PlayerNetworkController : NetworkBehaviour
 
     private ChessPieceRuntime CreateRuntimeFromNetworkPiece(NetworkChessPiece piece)
     {
+        if (!TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot pieceSnapshot))
+            return null;
+
+        return CreateRuntimeFromNetworkPiece(piece, pieceSnapshot);
+    }
+
+    private ChessPieceRuntime CreateRuntimeFromNetworkPiece(NetworkChessPiece piece, NetworkPieceSnapshot pieceSnapshot)
+    {
         if (piece == null) return null;
 
-        ChessPieceData pieceData = piece.PieceData;
+        ChessPieceData pieceData = null;
+
+        try
+        {
+            pieceData = piece.PieceData;
+        }
+        catch (System.InvalidOperationException)
+        {
+            // Piece was despawned between snapshot read and visual-data resolution.
+            // Skip it from client-side preview this frame.
+            return null;
+        }
 
         if (pieceData == null && ServerBoardManager.Instance != null)
-            pieceData = ServerBoardManager.Instance.GetPieceDataByIndex(piece.pieceDataIndex);
+            pieceData = ServerBoardManager.Instance.GetPieceDataByIndex(pieceSnapshot.PieceDataIndex);
 
         if (pieceData == null) return null;
 
-        return new ChessPieceRuntime(pieceData, piece.currentGridPos, piece.faction);
+        return new ChessPieceRuntime(pieceData, pieceSnapshot.GridPos, pieceSnapshot.Faction);
     }
 
     private void ShowHighlightTiles(List<Vector2Int> validTiles, TileState state)
@@ -1230,7 +1619,9 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public Vector2Int GetSelectedPieceGridPos()
     {
-        if (selectedPiece != null) return selectedPiece.currentGridPos;
+        if (TryGetNetworkPieceSnapshot(selectedPiece, out NetworkPieceSnapshot selectedSnapshot))
+            return selectedSnapshot.GridPos;
+
         return new Vector2Int(-1, -1);
     }
 }
