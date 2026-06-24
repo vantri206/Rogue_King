@@ -15,6 +15,8 @@ public class MatchPlayerInfoUI : MonoBehaviour
     [SerializeField] private PlayerInfoSlotUI kingSlot;
     [SerializeField] private PlayerInfoSlotUI chessSlot;
     [SerializeField] private TextMeshProUGUI turnText;
+    [Tooltip("Optional TextMeshPro text in PlayScene for the authoritative turn timer, formatted as mm:ss.")]
+    [SerializeField] private TextMeshProUGUI turnTimerText;
 
     [Header("Labels")]
     [SerializeField] private string kingRoleLabel = "Rogue King";
@@ -59,6 +61,7 @@ public class MatchPlayerInfoUI : MonoBehaviour
         ApplySlot(kingSlot, kingController, kingPlayer, kingRoleLabel, turnPlayer == kingPlayer, localPlayer == kingPlayer, "Waiting King...");
         ApplySlot(chessSlot, chessController, chessPlayer, chessRoleLabel, turnPlayer == chessPlayer, localPlayer == chessPlayer, "Waiting Chess...");
         UpdateTurnText(gameManager.currentGameState, turnPlayer, localPlayer, kingController, chessController);
+        UpdateTurnTimerText(gameManager);
     }
 
     private void SetWaiting(string message)
@@ -71,6 +74,9 @@ public class MatchPlayerInfoUI : MonoBehaviour
 
         if (turnText != null)
             turnText.text = message;
+
+        if (turnTimerText != null)
+            turnTimerText.text = "--";
     }
 
     private void ApplySlot(PlayerInfoSlotUI slot, PlayerNetworkController controller, PlayerRef playerRef, string role, bool isTurn, bool isLocalPlayer, string waitingText)
@@ -131,6 +137,39 @@ public class MatchPlayerInfoUI : MonoBehaviour
         PlayerNetworkController turnController = turnPlayer == ServerGameManager.Instance.kingPlayer ? kingController : chessController;
         string opponentName = turnController != null ? turnController.GetDisplayNameOrFallback() : $"Player {turnPlayer.PlayerId}";
         turnText.text = $"Waiting {opponentName}";
+    }
+
+    private void UpdateTurnTimerText(ServerGameManager gameManager)
+    {
+        if (turnTimerText == null)
+            return;
+
+        if (gameManager == null)
+        {
+            turnTimerText.text = "--";
+            return;
+        }
+
+        if (gameManager.currentGameState == NetGameState.GameOver)
+        {
+            turnTimerText.text = "00";
+            return;
+        }
+
+        if (!gameManager.IsTurnTimerActive())
+        {
+            turnTimerText.text = "--";
+            return;
+        }
+
+        int seconds = Mathf.CeilToInt(gameManager.GetTurnRemainingSeconds());
+        turnTimerText.text = FormatTimer(seconds);
+    }
+
+    private static string FormatTimer(int totalSeconds)
+    {
+        totalSeconds = Mathf.Max(0, totalSeconds);
+        return $"{totalSeconds:00}";
     }
 
     private static PlayerRef GetTurnPlayer(NetGameState state, PlayerRef kingPlayer, PlayerRef chessPlayer)

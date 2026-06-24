@@ -46,6 +46,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     [Tooltip("Delay before client loads menu after a server kick/disconnect. A short delay lets Fusion finish shutdown cleanly.")]
     [SerializeField] private float returnToMenuDelaySeconds = 0.25f;
 
+    [Tooltip("Maximum time to wait for client runner shutdown before forcing local cleanup and loading MenuScene.")]
+    [SerializeField] private float clientReturnShutdownTimeoutSeconds = 2.5f;
+
     [Tooltip("After Kick All, wait briefly for Fusion OnPlayerLeft callbacks before reopening the room.")]
     [SerializeField] private float reopenAfterKickDelaySeconds = 0.75f;
 
@@ -280,6 +283,17 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         pendingLeaderboardRefreshRequest = false;
         controller.ClientRequestLeaderboardRefresh();
         return true;
+    }
+
+    public void ClientLeaveCurrentSessionAndReturnToMenu(string reason = "client_return_to_menu")
+    {
+        if (runner != null && runner.IsServer)
+        {
+            Debug.LogWarning("[Client] Return-to-menu request ignored on server runner.");
+            return;
+        }
+
+        QueueClientReturnToMenu(reason);
     }
 
     private PlayerNetworkController GetLocalPlayerController()
@@ -1314,18 +1328,37 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (delay > 0f)
             yield return new WaitForSecondsRealtime(delay);
 
-        if (runner != null)
+        NetworkRunner oldRunner = runner;
+        NetworkSceneManagerDefault oldSceneManager = sceneManager;
+
+        if (oldRunner != null)
         {
-            runner.RemoveCallbacks(this);
-            Destroy(runner);
-            runner = null;
+            oldRunner.RemoveCallbacks(this);
+
+            Task shutdownTask = null;
+            try
+            {
+                shutdownTask = oldRunner.Shutdown();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Client] Exception while shutting down runner before returning to menu. Will force cleanup. {exception.GetType().Name}: {exception.Message}");
+            }
+
+            float timeout = Mathf.Max(0.25f, clientReturnShutdownTimeoutSeconds);
+            float startTime = Time.realtimeSinceStartup;
+            while (shutdownTask != null && !shutdownTask.IsCompleted && Time.realtimeSinceStartup - startTime < timeout)
+                yield return null;
+
+            if (shutdownTask != null && !shutdownTask.IsCompleted)
+                Debug.LogWarning($"[Client] Runner shutdown did not complete within {timeout:0.0}s. Loading MenuScene anyway.");
+            else if (shutdownTask != null && shutdownTask.IsFaulted)
+                Debug.LogWarning($"[Client] Runner shutdown task faulted before returning to menu: {shutdownTask.Exception?.GetBaseException().Message}");
         }
 
-        if (sceneManager != null)
-        {
-            Destroy(sceneManager);
-            sceneManager = null;
-        }
+        DestroyRunnerObject(oldRunner, oldSceneManager);
+        runner = null;
+        sceneManager = null;
 
         connectedPlayers.Clear();
         activeMatchPlayers.Clear();

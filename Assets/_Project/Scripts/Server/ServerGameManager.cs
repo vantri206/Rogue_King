@@ -20,6 +20,26 @@ public class ServerGameManager : NetworkBehaviour
     [Networked] public PlayerRef kingPlayer { get; set; }
     [Networked] public PlayerRef chessPlayer { get; set; }
 
+    [Header("Turn Timer")]
+    [Tooltip("Bật đồng hồ mỗi lượt. Server là nguồn sự thật; client chỉ đọc remaining time để hiển thị mm:ss.")]
+    [SerializeField] private bool enableTurnTimer = true;
+
+    [Tooltip("Thời gian mỗi lượt, tính bằng giây. Hết giờ thì server tự EndTurn, tức người chơi mất lượt.")]
+    [SerializeField] private float turnDurationSeconds = 60f;
+
+    [Networked, OnChangedRender(nameof(OnTurnTimerChanged))]
+    public TickTimer turnTimer { get; private set; }
+
+    [Networked] public int turnDurationNetworkSeconds { get; private set; }
+
+    [Header("Match Result")]
+    [Networked, OnChangedRender(nameof(OnMatchResultChanged))]
+    public PlayerRef winnerPlayer { get; private set; }
+
+    [Networked] public PlayerRef loserPlayer { get; private set; }
+    [Networked] public NetworkString<_32> matchEndReason { get; private set; }
+    [Networked] public int matchResultSerial { get; private set; }
+
     public List<DeadPieceRecord> graveyard = new List<DeadPieceRecord>();
     public bool hasUsedPawnShieldThisTurn { get; set; } = false;
 
@@ -40,6 +60,9 @@ public class ServerGameManager : NetworkBehaviour
             phase2TurnCount = 0;
             currentPhase = GamePhase.Phase1;
             matchResultRecorded = false;
+            turnTimer = TickTimer.None;
+            turnDurationNetworkSeconds = Mathf.CeilToInt(Mathf.Max(1f, turnDurationSeconds));
+            ClearMatchResultFields();
             ChangeState(NetGameState.Init);
         }
     }
@@ -51,6 +74,7 @@ public class ServerGameManager : NetworkBehaviour
         kingPlayer = p1;
         chessPlayer = p2;
         matchResultRecorded = false;
+        ClearMatchResultFields();
 
         Debug.Log($"[Server] Assigned Roles - King: {p1}, Chess: {p2}");
     }
@@ -87,6 +111,30 @@ public class ServerGameManager : NetworkBehaviour
         return player == chessPlayer;
     }
 
+    public bool IsTurnTimerActive()
+    {
+        return enableTurnTimer && IsTurnState(currentGameState);
+    }
+
+    public float GetTurnRemainingSeconds()
+    {
+        if (Runner == null || !IsTurnTimerActive())
+            return 0f;
+
+        float? remaining = turnTimer.RemainingTime(Runner);
+        return Mathf.Max(0f, remaining ?? 0f);
+    }
+
+    public int GetTurnDurationSeconds()
+    {
+        return Mathf.Max(1, turnDurationNetworkSeconds > 0 ? turnDurationNetworkSeconds : Mathf.CeilToInt(turnDurationSeconds));
+    }
+
+    public static bool IsTurnState(NetGameState state)
+    {
+        return state == NetGameState.KingTurn || state == NetGameState.ChessTurn;
+    }
+
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
@@ -96,6 +144,21 @@ public class ServerGameManager : NetworkBehaviour
             actionDelayTimer = TickTimer.None;
             ChangeState(nextStateAfterResolve);
         }
+
+        TickTurnTimer();
+    }
+
+    private void TickTurnTimer()
+    {
+        if (!enableTurnTimer) return;
+        if (!IsTurnState(currentGameState)) return;
+        if (!turnTimer.Expired(Runner)) return;
+
+        PlayerRef timeoutPlayer = currentGameState == NetGameState.KingTurn ? kingPlayer : chessPlayer;
+        Debug.Log($"[Server Timer] Player {timeoutPlayer} timed out during {currentGameState}. Turn is forfeited.");
+
+        // Hết giờ = mất lượt. Không gây damage, không tính thua match.
+        EndTurn();
     }
 
     public void ChangeState(NetGameState newState)
@@ -107,6 +170,11 @@ public class ServerGameManager : NetworkBehaviour
 
         currentGameState = newState;
         Debug.Log($"[Server] State changed to -> {newState}");
+
+        if (IsTurnState(newState))
+            StartTurnTimer(newState);
+        else
+            StopTurnTimer();
 
         if (newState == NetGameState.Setup)
         {
@@ -124,10 +192,33 @@ public class ServerGameManager : NetworkBehaviour
         }
     }
 
+    private void StartTurnTimer(NetGameState state)
+    {
+        if (!enableTurnTimer)
+        {
+            turnTimer = TickTimer.None;
+            return;
+        }
+
+        float duration = Mathf.Max(1f, turnDurationSeconds);
+        turnDurationNetworkSeconds = Mathf.CeilToInt(duration);
+        turnTimer = TickTimer.CreateFromSeconds(Runner, duration);
+
+        PlayerRef activePlayer = state == NetGameState.KingTurn ? kingPlayer : chessPlayer;
+        Debug.Log($"[Server Timer] Started {duration:0.0}s turn timer for {state}. ActivePlayer={activePlayer}");
+    }
+
+    private void StopTurnTimer()
+    {
+        turnTimer = TickTimer.None;
+    }
+
     public void EndTurn()
     {
         if (!HasStateAuthority) return;
+        if (!IsTurnState(currentGameState)) return;
 
+        StopTurnTimer();
         hasUsedPawnShieldThisTurn = false;
         manualResolveInProgress = false;
 
@@ -161,10 +252,12 @@ public class ServerGameManager : NetworkBehaviour
             }
         }
     }
+
     public void BeginManualResolve(NetGameState nextState)
     {
         if (!HasStateAuthority) return;
 
+        StopTurnTimer();
         hasUsedPawnShieldThisTurn = false;
         manualResolveInProgress = true;
         actionDelayTimer = TickTimer.None;
@@ -184,6 +277,7 @@ public class ServerGameManager : NetworkBehaviour
 
     private void TriggerResolvePhase(NetGameState nextState)
     {
+        StopTurnTimer();
         manualResolveInProgress = false;
         actionDelayTimer = TickTimer.CreateFromSeconds(Runner, visualResolveTime);
         nextStateAfterResolve = nextState;
@@ -201,8 +295,8 @@ public class ServerGameManager : NetworkBehaviour
         }
         else
         {
-            ChangeState(NetGameState.GameOver);
             DetermineWinner();
+            ChangeState(NetGameState.GameOver);
         }
     }
 
@@ -225,6 +319,7 @@ public class ServerGameManager : NetworkBehaviour
 
         manualResolveInProgress = false;
         actionDelayTimer = TickTimer.None;
+        StopTurnTimer();
         nextStateAfterResolve = NetGameState.GameOver;
         currentGameState = NetGameState.GameOver;
 
@@ -251,7 +346,10 @@ public class ServerGameManager : NetworkBehaviour
         chessPlayer = PlayerRef.None;
         manualResolveInProgress = false;
         actionDelayTimer = TickTimer.None;
+        turnTimer = TickTimer.None;
+        turnDurationNetworkSeconds = Mathf.CeilToInt(Mathf.Max(1f, turnDurationSeconds));
         nextStateAfterResolve = NetGameState.Init;
+        ClearMatchResultFields();
         currentGameState = NetGameState.Init;
 
         Debug.Log("[Server] Game state reset to lobby/init.");
@@ -279,6 +377,7 @@ public class ServerGameManager : NetworkBehaviour
         else
         {
             Debug.Log("[Server] Match DRAW! Elo is unchanged in this patch.");
+            RecordDrawResult("game_over_phase_draw");
         }
     }
 
@@ -289,6 +388,10 @@ public class ServerGameManager : NetworkBehaviour
         if (winner == PlayerRef.None || loser == PlayerRef.None || winner == loser) return;
 
         matchResultRecorded = true;
+        winnerPlayer = winner;
+        loserPlayer = loser;
+        matchEndReason = SanitizeReason(reason);
+        matchResultSerial++;
 
         if (ServerLeaderboardManager.Instance != null)
             ServerLeaderboardManager.Instance.ApplyMatchResult(winner, loser, reason);
@@ -296,8 +399,39 @@ public class ServerGameManager : NetworkBehaviour
             Debug.LogWarning("[Server] ServerLeaderboardManager missing. Match result was not saved to leaderboard.json.");
     }
 
+    private void RecordDrawResult(string reason)
+    {
+        if (!HasStateAuthority) return;
+        if (matchResultRecorded) return;
+
+        matchResultRecorded = true;
+        winnerPlayer = PlayerRef.None;
+        loserPlayer = PlayerRef.None;
+        matchEndReason = SanitizeReason(reason);
+        matchResultSerial++;
+    }
+
+    private void ClearMatchResultFields()
+    {
+        winnerPlayer = PlayerRef.None;
+        loserPlayer = PlayerRef.None;
+        matchEndReason = string.Empty;
+        matchResultSerial++;
+    }
+
+    private static string SanitizeReason(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            return "match_result";
+
+        reason = reason.Trim().Replace("\n", " ").Replace("\r", " ").Replace("\t", " ");
+        return reason.Length > 32 ? reason.Substring(0, 32) : reason;
+    }
+
     private void OnStateChanged() { }
     private void OnPhaseChanged() { }
+    private void OnTurnTimerChanged() { }
+    private void OnMatchResultChanged() { }
 
     public override void Despawned(NetworkRunner runner, bool hasState)
     {

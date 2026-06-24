@@ -75,6 +75,14 @@ MonoBehaviour:
   _currentPhase: 0
   _phase1TurnCount: 0
   _phase2TurnCount: 0
+  enableTurnTimer: 1
+  turnDurationSeconds: 30
+  _turnDurationNetworkSeconds: 0
+  _matchEndReason:
+    _length: 0
+    _data:
+      Data: 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  _matchResultSerial: 0
   visualResolveTime: 1.5
 --- !u!114 &6269751544342321873
 MonoBehaviour:
@@ -145,5 +153,6 @@ MonoBehaviour:
   minimumElo: 0
   maxAvatarId: 3
   defaultTopCount: 10
+  reloadJsonBeforeRead: 1
   serverAssignsDefaultNames: 1
   generatedNamePrefix: Player

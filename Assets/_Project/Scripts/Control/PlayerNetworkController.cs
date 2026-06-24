@@ -49,9 +49,17 @@ public class PlayerNetworkController : NetworkBehaviour
     [Header("Debug")]
     [SerializeField] private bool debugInputLogs = true;
 
+    [Header("Multiplayer Flow")]
+    [Tooltip("Temporary flow before MatchResultUI exists: when the authoritative match reaches GameOver, leave PlayScene and return to MenuScene automatically.")]
+    [SerializeField] private bool autoReturnToMenuOnGameOver = true;
+
+    [Tooltip("Small delay after GameOver before returning to menu. This gives final Elo/leaderboard RPCs a short window to arrive.")]
+    [SerializeField] private float autoReturnToMenuAfterGameOverDelaySeconds = 0.75f;
+
     private static PlayerNetworkController activeLocalInputController;
     private bool localInputEnabled;
     private bool localProfileSubmitted;
+    private bool gameOverReturnQueued;
 
     private ClientInputState currentState = ClientInputState.Idle;
 
@@ -81,6 +89,8 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public override void Spawned()
     {
+        gameOverReturnQueued = false;
+
         // Dedicated Server thường có StateAuthority nhưng không có InputAuthority local.
         // Vì vậy phải phát bài trước khi kiểm tra TryAcquireLocalInput(), nếu không server sẽ return sớm
         // và HandCards sẽ không bao giờ được initialize cho client.
@@ -467,6 +477,17 @@ public class PlayerNetworkController : NetworkBehaviour
         InitializeWeaponUIIfPossible();
         UpdateLocalRoleAndTurnUI();
 
+        if (ServerGameManager.Instance != null && ServerGameManager.Instance.currentGameState == NetGameState.GameOver)
+        {
+            QueueAutoReturnToMenuAfterGameOver();
+
+            if (currentState != ClientInputState.Idle)
+                CancelCurrentInteraction();
+
+            ToggleWeaponPanel(false);
+            return;
+        }
+
         switch (currentState)
         {
             case ClientInputState.Idle:
@@ -693,6 +714,32 @@ public class PlayerNetworkController : NetworkBehaviour
         weaponUI.TogglePanel(shouldShow);
         weaponUI.SetActionMode(currentState == ClientInputState.ConfirmingAttack);
         lastWeaponPanelState = shouldShow;
+    }
+
+    private void QueueAutoReturnToMenuAfterGameOver()
+    {
+        if (!autoReturnToMenuOnGameOver) return;
+        if (gameOverReturnQueued) return;
+        if (!IsLocalInputActive()) return;
+
+        gameOverReturnQueued = true;
+        StartCoroutine(AutoReturnToMenuAfterGameOverRoutine());
+    }
+
+    private System.Collections.IEnumerator AutoReturnToMenuAfterGameOverRoutine()
+    {
+        float delay = Mathf.Max(0f, autoReturnToMenuAfterGameOverDelaySeconds);
+        if (delay > 0f)
+            yield return new WaitForSecondsRealtime(delay);
+
+        if (NetworkRunnerHandler.Active != null)
+        {
+            NetworkRunnerHandler.Active.ClientLeaveCurrentSessionAndReturnToMenu("match_game_over_auto_return");
+        }
+        else
+        {
+            Debug.LogWarning("[Client Flow] Cannot return to MenuScene after GameOver because NetworkRunnerHandler.Active is missing.");
+        }
     }
 
     private void PollMouseInput()
