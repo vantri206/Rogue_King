@@ -977,6 +977,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 5147294847311098304, guid: 44dec1878ff00f344a526d3aa44004e5, type: 3}
+      propertyPath: parrelSyncClonesAreClients
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 5356940201763719369, guid: 44dec1878ff00f344a526d3aa44004e5, type: 3}
       propertyPath: m_Name
       value: NetworkBootstrap

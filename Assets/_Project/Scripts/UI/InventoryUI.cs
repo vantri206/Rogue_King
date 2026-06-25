@@ -10,15 +10,22 @@ public class InventoryUI : MonoBehaviour
 
     private void Start()
     {
-        InvokeRepeating(nameof(TryInitializeHand), 0.5f, 0.5f); // Check liên tục đến khi Player Spawn xong
+        InvokeRepeating(nameof(TryInitializeHand), 0.5f, 0.5f);
     }
 
     private void TryInitializeHand()
     {
         if (PlayerNetworkController.Local != null && ServerCardManager.Instance != null)
         {
-            if (PlayerNetworkController.Local.HandCards[0].isInitialized)
+            bool hasCard = false;
+            for (int i = 0; i < PlayerNetworkController.Local.HandCards.Length; i++)
             {
+                if (PlayerNetworkController.Local.HandCards[i].isInitialized) hasCard = true;
+            }
+
+            if (hasCard)
+            {
+                Debug.Log("🟩 [InventoryUI] Đã nhận được dữ liệu bài từ Server. Bắt đầu sinh UI...");
                 CancelInvoke(nameof(TryInitializeHand));
                 InitializeHand();
             }
@@ -30,17 +37,23 @@ public class InventoryUI : MonoBehaviour
         foreach (Transform child in handContainer) Destroy(child.gameObject);
         spawnedCards.Clear();
 
+        int count = 0;
         for (int i = 0; i < PlayerNetworkController.Local.HandCards.Length; i++)
         {
             var netCard = PlayerNetworkController.Local.HandCards[i];
             if (netCard.isInitialized)
             {
                 CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
-                GameObject go = Instantiate(cardPrefab, handContainer);
-                CardUI cardUI = go.GetComponent<CardUI>();
+                if (data != null)
+                {
+                    GameObject go = Instantiate(cardPrefab, handContainer);
+                    CardUI cardUI = go.GetComponent<CardUI>();
 
-                cardUI.SetupNetworked(netCard, data, i, OnCardClicked);
-                spawnedCards.Add(cardUI);
+                    cardUI.SetupNetworked(netCard, data, i, OnCardClicked);
+                    spawnedCards.Add(cardUI);
+                    count++;
+                    Debug.Log($"🟩 [InventoryUI] Đã sinh lá bài: {data.cardName} (Số lần dùng: {netCard.remainingUses})");
+                }
             }
         }
     }
@@ -49,20 +62,24 @@ public class InventoryUI : MonoBehaviour
     {
         if (PlayerNetworkController.Local == null || ServerCardManager.Instance == null || spawnedCards.Count == 0) return;
 
-        for (int i = 0; i < spawnedCards.Count; i++)
+        foreach (var cardUI in spawnedCards)
         {
-            var netCard = PlayerNetworkController.Local.HandCards[i];
+            int slot = cardUI.GetSlotIndex(); // Lấy đúng thẻ của mình để cập nhật, tránh lệch pha
+            var netCard = PlayerNetworkController.Local.HandCards[slot];
             CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
-            spawnedCards[i].UpdateUI(netCard, data);
+
+            if (data != null) cardUI.UpdateUI(netCard, data);
         }
     }
 
     private void OnCardClicked(int slotIndex)
     {
-        // Lấy tọa độ mục tiêu từ quân cờ đang click sáng trên bàn
-        Vector2Int targetGridPos = PlayerNetworkController.Local.GetSelectedPieceGridPos();
+        var netCard = PlayerNetworkController.Local.HandCards[slotIndex];
+        CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
 
-        // Gửi RPC báo Server chơi thẻ ở slot này, nhắm vào tọa độ này
-        PlayerNetworkController.Local.Rpc_RequestPlayCard(slotIndex, targetGridPos);
+        if (data != null)
+        {
+            PlayerNetworkController.Local.StartAimingCard(slotIndex, data);
+        }
     }
 }

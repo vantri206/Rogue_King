@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 2338202304148285466}
   - component: {fileID: 530178279919805024}
   - component: {fileID: 2147811931596715721}
+  - component: {fileID: 3206860669021291931}
   m_Layer: 5
   m_Name: CardUI_Prefab
   m_TagString: Untagged
@@ -141,6 +142,26 @@ MonoBehaviour:
   cooldownText: {fileID: 2513191741222845167}
   cooldownOverlay: {fileID: 8570227073470158569}
   cardButton: {fileID: 530178279919805024}
+--- !u!114 &3206860669021291931
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2070343204912290108}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
+  m_IgnoreLayout: 0
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: -1
+  m_PreferredHeight: 160
+  m_FlexibleWidth: 120
+  m_FlexibleHeight: -1
+  m_LayoutPriority: 1
 --- !u!1 &2357655127898544333
 GameObject:
   m_ObjectHideFlags: 0
@@ -173,11 +194,11 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 3117144046184611106}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -35, y: 55}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0.5, y: 1}
+  m_AnchorMax: {x: 0.5, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 150, y: 175}
+  m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &6115941635579218402
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -448,10 +469,10 @@ RectTransform:
   - {fileID: 1213282984258881055}
   m_Father: {fileID: 3117144046184611106}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -0.000039101, y: -0.85996}
-  m_SizeDelta: {x: 150, y: 176.72}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1679144954993175284
 CanvasRenderer:
@@ -523,11 +544,11 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 3117144046184611106}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -27.5, y: -75}
-  m_SizeDelta: {x: 169.01, y: 28.44}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 169.01, y: 28.440002}
+  m_Pivot: {x: 0, y: 0}
 --- !u!222 &1502275002188857486
 CanvasRenderer:
   m_ObjectHideFlags: 0

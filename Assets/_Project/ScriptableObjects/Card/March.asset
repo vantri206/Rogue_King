@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1292160660239bc469727b2c31fb6035, type: 3}
-  m_Name: Buff
+  m_Name: March
   m_EditorClassIdentifier: Assembly-CSharp::CardData
-  cardName: PawnShield
-  effectType: 1
+  cardName: March
+  effectType: 8
   requiredTargetName: 
   baseCooldown: 0
-  maxUses: 3
-  effectValue1: 10
-  effectValue2: 10
+  maxUses: 1
+  effectValue1: 2
+  effectValue2: 100

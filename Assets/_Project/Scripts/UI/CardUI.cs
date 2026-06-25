@@ -14,11 +14,15 @@ public class CardUI : MonoBehaviour
 
     public void SetupNetworked(NetworkCardInstance netCard, CardData data, int slotIndex, System.Action<int> onClickCallback)
     {
-        mySlotIndex = slotIndex;
+        mySlotIndex = slotIndex; // Nhớ chính xác vị trí của mình trên Server
         cardNameText.text = data.cardName;
 
         cardButton.onClick.RemoveAllListeners();
-        cardButton.onClick.AddListener(() => onClickCallback?.Invoke(mySlotIndex));
+        cardButton.onClick.AddListener(() =>
+        {
+            Debug.Log($"🟨 [CardUI] Đã Click vào thẻ: {data.cardName} (Khe số: {mySlotIndex})");
+            onClickCallback?.Invoke(mySlotIndex);
+        });
 
         UpdateUI(netCard, data);
     }
@@ -43,7 +47,9 @@ public class CardUI : MonoBehaviour
         {
             cooldownOverlay.gameObject.SetActive(false);
             cooldownText.text = "";
-            cardButton.interactable = true;
+            cardButton.interactable = true; // Sẵn sàng xài
         }
     }
+
+    public int GetSlotIndex() => mySlotIndex;
 }
