@@ -23,9 +23,19 @@ public class Projectile : MonoBehaviour
     [SerializeField] private float explosionDelay = 0f;
     [SerializeField] private GameObject explosionPrefab;
 
+    [Header("SFX")]
+    [Tooltip("Default one-shot sound when this projectile starts flying. Can be overridden by WeaponData.projectileLaunchSfx.")]
+    [SerializeField] private AudioClip launchSfx;
+    [Tooltip("Default one-shot sound when this projectile reaches target. Can be overridden by WeaponData.projectileImpactSfx.")]
+    [SerializeField] private AudioClip impactSfx;
+    [SerializeField, Range(0f, 1f)] private float sfxSpatialBlend = 0f;
+
     private Vector3 startPos;
     private Vector3 targetPos;
     private Action onHitCallback;
+
+    private AudioClip overrideLaunchSfx;
+    private AudioClip overrideImpactSfx;
 
     private float journeyLength;
     private float startTime;
@@ -33,12 +43,25 @@ public class Projectile : MonoBehaviour
 
     public void Initialize(Vector3 start, Vector3 target, Action hitCallback)
     {
+        Initialize(start, target, hitCallback, null, null, -1f);
+    }
+
+    public void Initialize(Vector3 start, Vector3 target, Action hitCallback, AudioClip launchSfxOverride, AudioClip impactSfxOverride, float spatialBlendOverride = -1f)
+    {
         startPos = start;
         targetPos = target;
         onHitCallback = hitCallback;
 
+        overrideLaunchSfx = launchSfxOverride;
+        overrideImpactSfx = impactSfxOverride;
+
+        if (spatialBlendOverride >= 0f)
+            sfxSpatialBlend = Mathf.Clamp01(spatialBlendOverride);
+
+        transform.position = startPos;
         startTime = Time.time;
         journeyLength = Vector3.Distance(startPos, targetPos);
+        hasReachedTarget = false;
 
         if (!spinWhileFlying && trajectory == WeaponTrajectory.Direct)
         {
@@ -48,6 +71,14 @@ public class Projectile : MonoBehaviour
                 float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
                 transform.rotation = Quaternion.Euler(0, 0, angle);
             }
+        }
+
+        PlayLaunchSfx();
+
+        if (journeyLength <= 0.0001f)
+        {
+            hasReachedTarget = true;
+            StartCoroutine(ExplodeRoutine());
         }
     }
 
@@ -90,6 +121,8 @@ public class Projectile : MonoBehaviour
             yield return new WaitForSeconds(explosionDelay);
         }
 
+        PlayImpactSfx();
+
         if (explosionPrefab != null)
         {
             Instantiate(explosionPrefab, targetPos, Quaternion.identity);
@@ -97,5 +130,19 @@ public class Projectile : MonoBehaviour
 
         onHitCallback?.Invoke();
         Destroy(gameObject);
+    }
+
+    private void PlayLaunchSfx()
+    {
+        AudioClip clip = overrideLaunchSfx != null ? overrideLaunchSfx : launchSfx;
+        if (clip != null)
+            GameAudioManager.PlaySfx(clip, transform.position, sfxSpatialBlend);
+    }
+
+    private void PlayImpactSfx()
+    {
+        AudioClip clip = overrideImpactSfx != null ? overrideImpactSfx : impactSfx;
+        if (clip != null)
+            GameAudioManager.PlaySfx(clip, targetPos, sfxSpatialBlend);
     }
 }

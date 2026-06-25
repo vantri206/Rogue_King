@@ -397,8 +397,11 @@ public class ServerCombatManager : NetworkBehaviour
 
         Vector2Int deathPos = targetPiece.currentGridPos;
         bool wasKing = targetPiece.isKing;
+        ChessFaction defeatedFaction = targetPiece.faction;
 
         ChessPieceRuntime runtime = ServerBoardManager.Instance.GetRuntimeAt(deathPos);
+        if (runtime != null)
+            defeatedFaction = runtime.faction;
 
         if (runtime != null && ServerGameManager.Instance != null)
         {
@@ -417,9 +420,18 @@ public class ServerCombatManager : NetworkBehaviour
             Runner.Despawn(targetPiece.Object);
         }
 
-        if (wasKing && ServerGameManager.Instance != null)
+        if (ServerGameManager.Instance != null)
         {
-            ServerGameManager.Instance.OnKingDefeated();
+            if (wasKing)
+            {
+                ServerGameManager.Instance.OnKingDefeated();
+            }
+            else if (defeatedFaction == ChessFaction.ChessAlliance &&
+                     !ServerBoardManager.Instance.HasAnyPieceOfFaction(ChessFaction.ChessAlliance))
+            {
+                Debug.Log("[Server Combat] All Chess Alliance pieces have been defeated. Rogue King wins the current phase.");
+                ServerGameManager.Instance.OnChessAllianceEliminated();
+            }
         }
 
         return wasKing;

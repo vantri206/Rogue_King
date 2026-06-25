@@ -33,6 +33,25 @@ public class WeaponData : ScriptableObject
     public GameObject gunPrefab;
     public GameObject projectilePrefab;
 
+    [Header("SFX")]
+    [Tooltip("One-shot sound when this weapon/skill starts resolving. Good for skill-cast or weapon-use sound.")]
+    public AudioClip useSfx;
+
+    [Tooltip("One-shot sound at the moment the gun/weapon fires. If null, projectile prefab SFX can still play.")]
+    public AudioClip fireSfx;
+
+    [Tooltip("Optional override launch sound passed to Projectile.Initialize. If null, the Projectile prefab's own launchSfx is used.")]
+    public AudioClip projectileLaunchSfx;
+
+    [Tooltip("Optional override impact sound passed to Projectile.Initialize. If null, the Projectile prefab's own impactSfx is used, or the explosion prefab SimpleAnimation can play its own SFX.")]
+    public AudioClip projectileImpactSfx;
+
+    [Tooltip("Optional sound played when the damage/hit/death effect is spawned on a piece. If null, put SFX directly on the effect prefab's SimpleAnimation instead.")]
+    public AudioClip damageEffectSfx;
+
+    [Tooltip("Spatial blend for world SFX. 0 = 2D, 1 = fully 3D. For this 2D game, 0 is usually safest.")]
+    [Range(0f, 1f)] public float sfxSpatialBlend = 0f;
+
     [Tooltip("Auto keeps legacy-friendly defaults: grenade/bomb/nade throws one projectile to the selected tile; shotgun/scatter/spray fires multiple projectiles toward max range tiles.")]
     public WeaponVFXProjectileMode vfxProjectileMode = WeaponVFXProjectileMode.Auto;
 

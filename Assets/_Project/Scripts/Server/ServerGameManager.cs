@@ -15,6 +15,13 @@ public class ServerGameManager : NetworkBehaviour
     [Networked] public int phase1TurnCount { get; private set; }
     [Networked] public int phase2TurnCount { get; private set; }
 
+    [Header("Phase Result")]
+    [Tooltip("Winner of Phase 1. Set when Phase 1 ends either by King defeated or all Chess Alliance pieces defeated.")]
+    [Networked] public PlayerRef phase1Winner { get; private set; }
+
+    [Tooltip("Winner of Phase 2. Set when Phase 2 ends either by King defeated or all Chess Alliance pieces defeated.")]
+    [Networked] public PlayerRef phase2Winner { get; private set; }
+
     [Networked] public TickTimer actionDelayTimer { get; set; }
     [Networked] private NetGameState nextStateAfterResolve { get; set; }
     [Networked] public PlayerRef kingPlayer { get; set; }
@@ -40,11 +47,19 @@ public class ServerGameManager : NetworkBehaviour
     [Networked] public NetworkString<_32> matchEndReason { get; private set; }
     [Networked] public int matchResultSerial { get; private set; }
 
+    [Header("Match Result Return Flow")]
+    [Tooltip("When the authoritative match reaches GameOver, keep clients in PlayScene long enough to see MatchResultUI, then kick/reopen the room.")]
+    [SerializeField] private bool kickAllPlayersAfterGameOver = true;
+
+    [Tooltip("Delay before the match server kicks both clients after GameOver. MatchResultUI should use the same value for its local countdown.")]
+    [SerializeField] private float kickAllPlayersAfterGameOverDelaySeconds = 5f;
+
     public List<DeadPieceRecord> graveyard = new List<DeadPieceRecord>();
     public bool hasUsedPawnShieldThisTurn { get; set; } = false;
 
     private bool manualResolveInProgress;
     private bool matchResultRecorded;
+    private bool matchResultAutoKickQueued;
 
     [Header("Settings")]
     [SerializeField] private float visualResolveTime = 1.5f;
@@ -60,6 +75,8 @@ public class ServerGameManager : NetworkBehaviour
             phase2TurnCount = 0;
             currentPhase = GamePhase.Phase1;
             matchResultRecorded = false;
+            matchResultAutoKickQueued = false;
+            ClearPhaseResultFields();
             turnTimer = TickTimer.None;
             turnDurationNetworkSeconds = Mathf.CeilToInt(Mathf.Max(1f, turnDurationSeconds));
             ClearMatchResultFields();
@@ -74,6 +91,8 @@ public class ServerGameManager : NetworkBehaviour
         kingPlayer = p1;
         chessPlayer = p2;
         matchResultRecorded = false;
+        matchResultAutoKickQueued = false;
+        ClearPhaseResultFields();
         ClearMatchResultFields();
 
         Debug.Log($"[Server] Assigned Roles - King: {p1}, Chess: {p2}");
@@ -175,6 +194,9 @@ public class ServerGameManager : NetworkBehaviour
             StartTurnTimer(newState);
         else
             StopTurnTimer();
+
+        if (newState == NetGameState.GameOver)
+            QueueMatchResultAutoKickIfNeeded();
 
         if (newState == NetGameState.Setup)
         {
@@ -288,16 +310,47 @@ public class ServerGameManager : NetworkBehaviour
     public void OnKingDefeated()
     {
         if (!HasStateAuthority) return;
+        if (currentGameState == NetGameState.GameOver || currentGameState == NetGameState.PhaseTransition) return;
+
+        // King bị hạ => người đang cầm Chess Alliance thắng phase hiện tại.
+        CompleteCurrentPhase(chessPlayer, "king_defeated");
+    }
+
+    public void OnChessAllianceEliminated()
+    {
+        if (!HasStateAuthority) return;
+        if (currentGameState == NetGameState.GameOver || currentGameState == NetGameState.PhaseTransition) return;
+
+        // Tất cả quân Chess Alliance bị hạ => người đang cầm Rogue King thắng phase hiện tại.
+        CompleteCurrentPhase(kingPlayer, "all_chess_alliance_defeated");
+    }
+
+    private void CompleteCurrentPhase(PlayerRef phaseWinner, string phaseReason)
+    {
+        if (!HasStateAuthority) return;
+        if (phaseWinner == PlayerRef.None)
+        {
+            Debug.LogWarning($"[Server Result] Cannot complete phase because phaseWinner is None. Reason={phaseReason}");
+            return;
+        }
+
+        StopTurnTimer();
+        manualResolveInProgress = false;
+        actionDelayTimer = TickTimer.None;
 
         if (currentPhase == GamePhase.Phase1)
         {
+            phase1Winner = phaseWinner;
+            Debug.Log($"[Server Result] Phase 1 ended. Winner={phase1Winner}, Reason={phaseReason}, Phase1Turns={phase1TurnCount}");
             ChangeState(NetGameState.PhaseTransition);
+            return;
         }
-        else
-        {
-            DetermineWinner();
-            ChangeState(NetGameState.GameOver);
-        }
+
+        phase2Winner = phaseWinner;
+        Debug.Log($"[Server Result] Phase 2 ended. Winner={phase2Winner}, Reason={phaseReason}, Phase2Turns={phase2TurnCount}");
+
+        DetermineMatchWinnerFromPhaseResults(phaseReason);
+        ChangeState(NetGameState.GameOver);
     }
 
     public void AbortMatchBecausePlayerLeft(PlayerRef player)
@@ -322,6 +375,7 @@ public class ServerGameManager : NetworkBehaviour
         StopTurnTimer();
         nextStateAfterResolve = NetGameState.GameOver;
         currentGameState = NetGameState.GameOver;
+        QueueMatchResultAutoKickIfNeeded();
 
         Debug.Log($"[Server] Match aborted because {player} left. Winner by forfeit={winner}. Session is locked until the room is empty.");
     }
@@ -342,6 +396,8 @@ public class ServerGameManager : NetworkBehaviour
         phase2TurnCount = 0;
         currentPhase = GamePhase.Phase1;
         matchResultRecorded = false;
+        matchResultAutoKickQueued = false;
+        ClearPhaseResultFields();
         kingPlayer = PlayerRef.None;
         chessPlayer = PlayerRef.None;
         manualResolveInProgress = false;
@@ -355,30 +411,85 @@ public class ServerGameManager : NetworkBehaviour
         Debug.Log("[Server] Game state reset to lobby/init.");
     }
 
-    private void DetermineWinner()
+    private void DetermineMatchWinnerFromPhaseResults(string finalPhaseReason)
     {
-        // At Phase 2, roles have already been swapped:
-        // - current chessPlayer was the original Phase 1 King.
-        // - current kingPlayer is the Phase 2 King.
+        if (phase1Winner == PlayerRef.None || phase2Winner == PlayerRef.None)
+        {
+            Debug.LogWarning($"[Server Result] Missing phase winner. Phase1Winner={phase1Winner}, Phase2Winner={phase2Winner}. Recording draw fallback.");
+            RecordDrawResult("game_over_missing_phase_result");
+            return;
+        }
+
+        if (phase1Winner == phase2Winner)
+        {
+            PlayerRef winner = phase1Winner;
+            PlayerRef loser = GetOpponentOf(winner);
+
+            if (loser == PlayerRef.None)
+            {
+                Debug.LogWarning($"[Server Result] Cannot resolve loser for sweep winner={winner}. Recording draw fallback.");
+                RecordDrawResult("game_over_invalid_sweep");
+                return;
+            }
+
+            Debug.Log($"[Server Result] Match winner by winning both phases. Winner={winner}, Loser={loser}, FinalReason={finalPhaseReason}");
+            RecordMatchResult(winner, loser, "game_over_two_phase_win");
+            return;
+        }
+
+        DetermineWinnerBySplitPhaseScore();
+    }
+
+    private void DetermineWinnerBySplitPhaseScore()
+    {
+        // Nếu mỗi player thắng 1 phase, dùng số lượt của phase thắng đó làm tie-break.
+        // Phase nào được kết thúc với ít lượt hơn => winner của phase đó thắng match.
+        // Nếu bằng lượt => Draw, Elo +0.
         if (phase1TurnCount < phase2TurnCount)
         {
-            PlayerRef winner = chessPlayer;
-            PlayerRef loser = kingPlayer;
-            Debug.Log($"[Server] Player 1 / Phase 1 King WINS! Winner={winner}, Loser={loser}");
-            RecordMatchResult(winner, loser, "game_over_phase_score");
+            PlayerRef winner = phase1Winner;
+            PlayerRef loser = GetOpponentOf(winner);
+            Debug.Log($"[Server Result] Match winner by split-phase score. Phase1 faster ({phase1TurnCount} < {phase2TurnCount}). Winner={winner}, Loser={loser}");
+            RecordMatchResult(winner, loser, "game_over_split_phase_score");
         }
         else if (phase2TurnCount < phase1TurnCount)
         {
-            PlayerRef winner = kingPlayer;
-            PlayerRef loser = chessPlayer;
-            Debug.Log($"[Server] Player 2 / Phase 2 King WINS! Winner={winner}, Loser={loser}");
-            RecordMatchResult(winner, loser, "game_over_phase_score");
+            PlayerRef winner = phase2Winner;
+            PlayerRef loser = GetOpponentOf(winner);
+            Debug.Log($"[Server Result] Match winner by split-phase score. Phase2 faster ({phase2TurnCount} < {phase1TurnCount}). Winner={winner}, Loser={loser}");
+            RecordMatchResult(winner, loser, "game_over_split_phase_score");
         }
         else
         {
-            Debug.Log("[Server] Match DRAW! Elo is unchanged in this patch.");
-            RecordDrawResult("game_over_phase_draw");
+            Debug.Log($"[Server Result] Match DRAW by split-phase score. Phase1Turns={phase1TurnCount}, Phase2Turns={phase2TurnCount}. Elo is unchanged.");
+            RecordDrawResult("game_over_split_phase_draw");
         }
+    }
+
+    private PlayerRef GetOpponentOf(PlayerRef player)
+    {
+        if (player == PlayerRef.None)
+            return PlayerRef.None;
+
+        if (player == kingPlayer)
+            return chessPlayer;
+
+        if (player == chessPlayer)
+            return kingPlayer;
+
+        if (player == phase1Winner && phase2Winner != PlayerRef.None && phase2Winner != player)
+            return phase2Winner;
+
+        if (player == phase2Winner && phase1Winner != PlayerRef.None && phase1Winner != player)
+            return phase1Winner;
+
+        return PlayerRef.None;
+    }
+
+    private void ClearPhaseResultFields()
+    {
+        phase1Winner = PlayerRef.None;
+        phase2Winner = PlayerRef.None;
     }
 
     private void RecordMatchResult(PlayerRef winner, PlayerRef loser, string reason)
@@ -417,6 +528,27 @@ public class ServerGameManager : NetworkBehaviour
         loserPlayer = PlayerRef.None;
         matchEndReason = string.Empty;
         matchResultSerial++;
+    }
+
+    private void QueueMatchResultAutoKickIfNeeded()
+    {
+        if (!HasStateAuthority) return;
+        if (!kickAllPlayersAfterGameOver) return;
+        if (matchResultAutoKickQueued) return;
+
+        matchResultAutoKickQueued = true;
+
+        NetworkRunnerHandler handler = NetworkRunnerHandler.Active;
+        if (handler == null)
+        {
+            Debug.LogWarning("[Server Result] Cannot schedule post-result Kick All because NetworkRunnerHandler.Active is missing.");
+            return;
+        }
+
+        float delay = Mathf.Max(0f, kickAllPlayersAfterGameOverDelaySeconds);
+        bool queued = handler.ServerKickAllPlayersAndReopenAfterDelay(delay, "match_result_auto_kick");
+        if (queued)
+            Debug.Log($"[Server Result] MatchResultUI window opened. Server will kick/reopen room in {delay:0.0}s.");
     }
 
     private static string SanitizeReason(string reason)

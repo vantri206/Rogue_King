@@ -54,12 +54,16 @@ public class MatchPlayerInfoUI : MonoBehaviour
         PlayerRef chessPlayer = gameManager.chessPlayer;
         PlayerRef turnPlayer = GetTurnPlayer(gameManager.currentGameState, kingPlayer, chessPlayer);
         PlayerRef localPlayer = GetLocalPlayerRef();
+        bool hasLocalPlayer = localPlayer != PlayerRef.None;
 
         PlayerNetworkController kingController = FindControllerForPlayer(kingPlayer);
         PlayerNetworkController chessController = FindControllerForPlayer(chessPlayer);
 
-        ApplySlot(kingSlot, kingController, kingPlayer, kingRoleLabel, turnPlayer == kingPlayer, localPlayer == kingPlayer, "Waiting King...");
-        ApplySlot(chessSlot, chessController, chessPlayer, chessRoleLabel, turnPlayer == chessPlayer, localPlayer == chessPlayer, "Waiting Chess...");
+        // These slots follow the CURRENT server roles/factions, not the original join order.
+        // After phase transition, ServerGameManager.SwapRoles() changes kingPlayer/chessPlayer,
+        // so the UI automatically swaps the two player profiles to stay on the correct faction side.
+        ApplySlot(kingSlot, kingController, kingPlayer, kingRoleLabel, turnPlayer == kingPlayer, localPlayer == kingPlayer, hasLocalPlayer, "Waiting King...");
+        ApplySlot(chessSlot, chessController, chessPlayer, chessRoleLabel, turnPlayer == chessPlayer, localPlayer == chessPlayer, hasLocalPlayer, "Waiting Chess...");
         UpdateTurnText(gameManager.currentGameState, turnPlayer, localPlayer, kingController, chessController);
         UpdateTurnTimerText(gameManager);
     }
@@ -79,7 +83,7 @@ public class MatchPlayerInfoUI : MonoBehaviour
             turnTimerText.text = "--";
     }
 
-    private void ApplySlot(PlayerInfoSlotUI slot, PlayerNetworkController controller, PlayerRef playerRef, string role, bool isTurn, bool isLocalPlayer, string waitingText)
+    private void ApplySlot(PlayerInfoSlotUI slot, PlayerNetworkController controller, PlayerRef playerRef, string role, bool isTurn, bool isLocalPlayer, bool hasLocalPlayer, string waitingText)
     {
         if (slot == null)
             return;
@@ -96,7 +100,7 @@ public class MatchPlayerInfoUI : MonoBehaviour
 
         int elo = controller.GetEloOrDefault();
         int eloDelta = controller.GetLastEloDelta();
-        slot.SetPlayer(avatar, displayName, role, isTurn, isLocalPlayer, elo, eloDelta);
+        slot.SetPlayer(avatar, displayName, role, isTurn, isLocalPlayer, elo, eloDelta, hasLocalPlayer);
     }
 
     private void UpdateTurnText(NetGameState state, PlayerRef turnPlayer, PlayerRef localPlayer, PlayerNetworkController kingController, PlayerNetworkController chessController)

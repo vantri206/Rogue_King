@@ -126,15 +126,21 @@ public class ServerLeaderboardManager : MonoBehaviour
         loserEntry.losses++;
         loserEntry.totalMatches++;
 
-        int delta = Mathf.Max(1, simpleWinDelta);
-        winnerEntry.elo = Mathf.Max(minimumElo, winnerEntry.elo + delta);
-        loserEntry.elo = Mathf.Max(minimumElo, loserEntry.elo - delta);
+        int nominalDelta = Mathf.Max(1, simpleWinDelta);
+        int winnerEloBefore = Mathf.Max(minimumElo, winnerEntry.elo <= 0 ? startingElo : winnerEntry.elo);
+        int loserEloBefore = Mathf.Max(minimumElo, loserEntry.elo <= 0 ? startingElo : loserEntry.elo);
 
-        winnerController.ServerSetElo(winnerEntry.elo, delta);
-        loserController.ServerSetElo(loserEntry.elo, -delta);
+        winnerEntry.elo = Mathf.Max(minimumElo, winnerEloBefore + nominalDelta);
+        loserEntry.elo = Mathf.Max(minimumElo, loserEloBefore - nominalDelta);
+
+        int winnerActualDelta = winnerEntry.elo - winnerEloBefore;
+        int loserActualDelta = loserEntry.elo - loserEloBefore;
+
+        winnerController.ServerSetElo(winnerEntry.elo, winnerActualDelta);
+        loserController.ServerSetElo(loserEntry.elo, loserActualDelta);
 
         SaveDatabase();
-        Debug.Log($"[Leaderboard] Result saved ({reason}). Winner={winnerEntry.displayName} +{delta} => {winnerEntry.elo}; Loser={loserEntry.displayName} -{delta} => {loserEntry.elo}");
+        Debug.Log($"[Leaderboard] Result saved ({reason}). Winner={winnerEntry.displayName} {FormatSignedDelta(winnerActualDelta)} => {winnerEntry.elo}; Loser={loserEntry.displayName} {FormatSignedDelta(loserActualDelta)} => {loserEntry.elo}");
 
         PushLeaderboardToAllActivePlayers();
         return true;
@@ -174,6 +180,11 @@ public class ServerLeaderboardManager : MonoBehaviour
             return;
 
         controller.ServerPushLeaderboardSnapshot(GetTopPlayers(defaultTopCount));
+    }
+
+    private static string FormatSignedDelta(int delta)
+    {
+        return delta > 0 ? $"+{delta}" : delta.ToString();
     }
 
     private LeaderboardEntryData GetOrCreateEntry(string guestId, int avatarId)

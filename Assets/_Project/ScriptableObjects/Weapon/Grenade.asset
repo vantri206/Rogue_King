@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Grenade
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: GRENADE
-  weaponIcon: {fileID: 5569263815511090389, guid: 14375276827961d439b98605d253f8e8, type: 3}
+  weaponIcon: {fileID: -749979706255167317, guid: 4fdc0faaf59e43d41a9cda6599c80b8b, type: 3}
   baseDamage: 1
   defaultEffectType: 0
   isDirectional: 0
@@ -80,5 +80,16 @@ MonoBehaviour:
   - {x: 0, y: 0}
   gunPrefab: {fileID: 0}
   projectilePrefab: {fileID: 449155884897940277, guid: 71397930252de4a4a8ca55fed3159c1d, type: 3}
+  useSfx: {fileID: 0}
+  fireSfx: {fileID: 0}
+  projectileLaunchSfx: {fileID: 0}
+  projectileImpactSfx: {fileID: 0}
+  damageEffectSfx: {fileID: 8300000, guid: d5238ccbd74cd8343aafbe93fcf5f045, type: 3}
+  sfxSpatialBlend: 0
   vfxProjectileMode: 1
+  overrideProjectileTargetOffset: 0
+  projectileTargetWorldOffset: {x: 0, y: 0.65, z: 0}
+  destroyedEffectPrefab: {fileID: 0}
+  overrideDestroyedEffectOffset: 0
+  destroyedEffectWorldOffset: {x: 0, y: 0, z: 0}
   serverDamageDelaySeconds: 0

@@ -14,8 +14,24 @@ public class PlayerInfoSlotUI : MonoBehaviour
     [SerializeField] private CanvasGroup canvasGroup;
     [SerializeField] private float inactiveAlpha = 0.65f;
 
+    [Header("Name Colors")]
+    [SerializeField] private bool colorNameByLocalRelation = true;
+    [SerializeField] private Color localPlayerNameColor = new Color(0.2f, 0.55f, 1f, 1f);
+    [SerializeField] private Color opponentNameColor = new Color(1f, 0.25f, 0.25f, 1f);
+    [SerializeField] private bool restoreOriginalNameColorWhenEmpty = true;
+
+    private Color originalNameColor = Color.white;
+    private bool capturedOriginalNameColor;
+
+    private void Awake()
+    {
+        CaptureOriginalNameColor();
+    }
+
     public void SetEmpty(string label = "Waiting...")
     {
+        CaptureOriginalNameColor();
+
         if (avatarImage != null)
         {
             avatarImage.sprite = null;
@@ -23,7 +39,11 @@ public class PlayerInfoSlotUI : MonoBehaviour
         }
 
         if (nameText != null)
+        {
             nameText.text = label;
+            if (restoreOriginalNameColorWhenEmpty)
+                nameText.color = originalNameColor;
+        }
 
         if (roleText != null)
             roleText.text = string.Empty;
@@ -44,8 +64,10 @@ public class PlayerInfoSlotUI : MonoBehaviour
             canvasGroup.alpha = inactiveAlpha;
     }
 
-    public void SetPlayer(Sprite avatar, string displayName, string role, bool isTurn, bool isLocalPlayer, int elo = -1, int eloDelta = 0)
+    public void SetPlayer(Sprite avatar, string displayName, string role, bool isTurn, bool isLocalPlayer, int elo = -1, int eloDelta = 0, bool hasLocalPlayer = true)
     {
+        CaptureOriginalNameColor();
+
         if (avatarImage != null)
         {
             avatarImage.sprite = avatar;
@@ -53,7 +75,10 @@ public class PlayerInfoSlotUI : MonoBehaviour
         }
 
         if (nameText != null)
+        {
             nameText.text = string.IsNullOrWhiteSpace(displayName) ? "Player" : displayName;
+            ApplyNameColor(isLocalPlayer, hasLocalPlayer);
+        }
 
         if (roleText != null)
             roleText.text = role;
@@ -79,5 +104,28 @@ public class PlayerInfoSlotUI : MonoBehaviour
 
         if (canvasGroup != null)
             canvasGroup.alpha = isTurn ? 1f : inactiveAlpha;
+    }
+
+    private void ApplyNameColor(bool isLocalPlayer, bool hasLocalPlayer)
+    {
+        if (nameText == null || !colorNameByLocalRelation)
+            return;
+
+        if (!hasLocalPlayer)
+        {
+            nameText.color = originalNameColor;
+            return;
+        }
+
+        nameText.color = isLocalPlayer ? localPlayerNameColor : opponentNameColor;
+    }
+
+    private void CaptureOriginalNameColor()
+    {
+        if (capturedOriginalNameColor || nameText == null)
+            return;
+
+        originalNameColor = nameText.color;
+        capturedOriginalNameColor = true;
     }
 }

@@ -100,6 +100,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     private bool matchAbandoned;
     private bool serverSceneReady;
     private bool isKickingAllPlayers;
+    private bool scheduledKickAllPlayers;
     private bool clientReturnToMenuQueued;
 
     private bool runtimeForceClient;
@@ -700,8 +701,50 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
+        scheduledKickAllPlayers = false;
         StartCoroutine(ServerKickAllPlayersAndReopenRoutine());
         return true;
+    }
+
+    public bool ServerKickAllPlayersAndReopenAfterDelay(float delaySeconds, string reason = "scheduled_kick_all")
+    {
+        if (runner == null || !runner.IsServer)
+        {
+            Debug.LogWarning("[Server Control] Scheduled kick ignored: runner is not a server.");
+            return false;
+        }
+
+        if (isKickingAllPlayers || scheduledKickAllPlayers)
+        {
+            Debug.LogWarning("[Server Control] Scheduled kick ignored: a kick operation is already queued/running.");
+            return false;
+        }
+
+        StartCoroutine(ServerKickAllPlayersAndReopenAfterDelayRoutine(delaySeconds, reason));
+        return true;
+    }
+
+    private System.Collections.IEnumerator ServerKickAllPlayersAndReopenAfterDelayRoutine(float delaySeconds, string reason)
+    {
+        scheduledKickAllPlayers = true;
+
+        float safeDelay = Mathf.Max(0f, delaySeconds);
+        Debug.Log($"[Server Control] Scheduled Kick All in {safeDelay:0.0}s. Reason={reason}");
+
+        if (safeDelay > 0f)
+            yield return new WaitForSecondsRealtime(safeDelay);
+        else
+            yield return null;
+
+        scheduledKickAllPlayers = false;
+
+        if (runner == null || !runner.IsServer)
+            yield break;
+
+        if (isKickingAllPlayers)
+            yield break;
+
+        ServerKickAllPlayersAndReopen();
     }
 
     private System.Collections.IEnumerator ServerKickAllPlayersAndReopenRoutine()

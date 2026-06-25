@@ -45,6 +45,8 @@ public class CombatVFXManager : SingletonMB<CombatVFXManager>
     {
         if (weapon == null || board == null) return;
 
+        PlayWeaponUseSfx(weapon, startWorldPos);
+
         List<Vector2Int> resolvedAffectedGrids = ResolveAffectedGrids(selectedTargetGrid, affectedGrids);
 
         if (weapon.projectilePrefab == null)
@@ -84,8 +86,33 @@ public class CombatVFXManager : SingletonMB<CombatVFXManager>
         }
         else
         {
+            PlayWeaponFireSfx(weapon, spawnPos);
             fireProjectiles.Invoke();
         }
+    }
+
+    private void PlayWeaponUseSfx(WeaponData weapon, Vector3 worldPosition)
+    {
+        if (weapon == null || weapon.useSfx == null)
+            return;
+
+        GameAudioManager.PlaySfx(weapon.useSfx, worldPosition, weapon.sfxSpatialBlend);
+    }
+
+    private void PlayWeaponFireSfx(WeaponData weapon, Vector3 worldPosition)
+    {
+        if (weapon == null || weapon.fireSfx == null)
+            return;
+
+        GameAudioManager.PlaySfx(weapon.fireSfx, worldPosition, weapon.sfxSpatialBlend);
+    }
+
+    private void PlayDamageEffectSfx(WeaponData weapon, Vector3 worldPosition)
+    {
+        if (weapon == null || weapon.damageEffectSfx == null)
+            return;
+
+        GameAudioManager.PlaySfx(weapon.damageEffectSfx, worldPosition, weapon.sfxSpatialBlend);
     }
 
     private List<Vector2Int> ResolveAffectedGrids(Vector2Int selectedTargetGrid, List<Vector2Int> affectedGrids)
@@ -201,6 +228,7 @@ public class CombatVFXManager : SingletonMB<CombatVFXManager>
         {
             if (gunInstance == null) return;
 
+            PlayWeaponFireSfx(weapon, gunInstance.transform.position);
             fireProjectiles?.Invoke();
 
             Vector3 recoilPos = -aimDirection * 0.3f;
@@ -252,12 +280,18 @@ public class CombatVFXManager : SingletonMB<CombatVFXManager>
             if (projectileComponent != null)
             {
                 pendingProjectiles++;
-                projectileComponent.Initialize(spawnPos, endWorldPos, () =>
-                {
-                    pendingProjectiles--;
-                    if (pendingProjectiles <= 0)
-                        resolveOnce.Invoke();
-                });
+                projectileComponent.Initialize(
+                    spawnPos,
+                    endWorldPos,
+                    () =>
+                    {
+                        pendingProjectiles--;
+                        if (pendingProjectiles <= 0)
+                            resolveOnce.Invoke();
+                    },
+                    weapon.projectileLaunchSfx,
+                    weapon.projectileImpactSfx,
+                    weapon.sfxSpatialBlend);
             }
             else
             {
@@ -314,6 +348,7 @@ public class CombatVFXManager : SingletonMB<CombatVFXManager>
 
         Vector3 spawnPos = tile.transform.position + board.PiecePlacementOffset + ResolveDestroyedEffectOffset(weapon);
         Instantiate(effectPrefab, spawnPos, Quaternion.identity);
+        PlayDamageEffectSfx(weapon, spawnPos);
     }
 
     private Vector3 ResolveDestroyedEffectOffset(WeaponData weapon)

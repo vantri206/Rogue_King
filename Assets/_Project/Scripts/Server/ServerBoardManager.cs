@@ -225,6 +225,35 @@ public class ServerBoardManager : NetworkBehaviour
         return piece;
     }
 
+    public bool HasAnyPieceOfFaction(ChessFaction faction)
+    {
+        if (!HasStateAuthority) return false;
+
+        foreach (var kvp in boardState)
+        {
+            NetworkChessPiece piece = kvp.Value;
+            if (piece != null && piece.faction == faction)
+                return true;
+        }
+
+        return false;
+    }
+
+    public int CountPiecesOfFaction(ChessFaction faction)
+    {
+        if (!HasStateAuthority) return 0;
+
+        int count = 0;
+        foreach (var kvp in boardState)
+        {
+            NetworkChessPiece piece = kvp.Value;
+            if (piece != null && piece.faction == faction)
+                count++;
+        }
+
+        return count;
+    }
+
     public ChessPieceRuntime GetRuntimeAt(Vector2Int pos)
     {
         if (logicBoard == null) return null;

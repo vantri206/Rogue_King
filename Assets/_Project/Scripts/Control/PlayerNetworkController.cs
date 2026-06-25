@@ -50,10 +50,10 @@ public class PlayerNetworkController : NetworkBehaviour
     [SerializeField] private bool debugInputLogs = true;
 
     [Header("Multiplayer Flow")]
-    [Tooltip("Temporary flow before MatchResultUI exists: when the authoritative match reaches GameOver, leave PlayScene and return to MenuScene automatically.")]
+    [Tooltip("Fallback only: if no MatchResultUI exists in PlayScene, leave PlayScene and return to MenuScene automatically when GameOver is reached.")]
     [SerializeField] private bool autoReturnToMenuOnGameOver = true;
 
-    [Tooltip("Small delay after GameOver before returning to menu. This gives final Elo/leaderboard RPCs a short window to arrive.")]
+    [Tooltip("Fallback delay used only when no MatchResultUI exists in PlayScene.")]
     [SerializeField] private float autoReturnToMenuAfterGameOverDelaySeconds = 0.75f;
 
     private static PlayerNetworkController activeLocalInputController;
@@ -718,6 +718,10 @@ public class PlayerNetworkController : NetworkBehaviour
 
     private void QueueAutoReturnToMenuAfterGameOver()
     {
+        // New result-flow patch: when MatchResultUI is present, it owns the GameOver UI,
+        // the Back button, and the safety return. Keep this old auto-return only as fallback
+        // for scenes that have not been set up with a result panel yet.
+        if (MatchResultUI.ExistsInScene) return;
         if (!autoReturnToMenuOnGameOver) return;
         if (gameOverReturnQueued) return;
         if (!IsLocalInputActive()) return;
