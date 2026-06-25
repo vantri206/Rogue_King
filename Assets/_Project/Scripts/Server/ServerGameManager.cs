@@ -22,6 +22,20 @@ public class ServerGameManager : NetworkBehaviour
     [Tooltip("Winner of Phase 2. Set when Phase 2 ends either by King defeated or all Chess Alliance pieces defeated.")]
     [Networked] public PlayerRef phase2Winner { get; private set; }
 
+    [Header("Phase Transition Delay")]
+    [Tooltip("Bật delay giữa Phase 1 và Phase 2 để client thấy kết quả phase trước khi board/role bị đổi.")]
+    [SerializeField] private bool enablePhaseTransitionDelay = true;
+
+    [Tooltip("Thời gian đếm ngược trước khi chuyển từ Phase 1 sang Phase 2.")]
+    [SerializeField] private float phaseTransitionDelaySeconds = 5f;
+
+    [Networked, OnChangedRender(nameof(OnPhaseTransitionChanged))]
+    public TickTimer phaseTransitionTimer { get; private set; }
+
+    [Networked] public int phaseTransitionDurationNetworkSeconds { get; private set; }
+    [Networked] public PlayerRef phaseTransitionWinner { get; private set; }
+    [Networked] public int phaseTransitionPhaseNumber { get; private set; }
+
     [Networked] public TickTimer actionDelayTimer { get; set; }
     [Networked] private NetGameState nextStateAfterResolve { get; set; }
     [Networked] public PlayerRef kingPlayer { get; set; }
@@ -77,6 +91,7 @@ public class ServerGameManager : NetworkBehaviour
             matchResultRecorded = false;
             matchResultAutoKickQueued = false;
             ClearPhaseResultFields();
+            ClearPhaseTransitionFields();
             turnTimer = TickTimer.None;
             turnDurationNetworkSeconds = Mathf.CeilToInt(Mathf.Max(1f, turnDurationSeconds));
             ClearMatchResultFields();
@@ -93,6 +108,7 @@ public class ServerGameManager : NetworkBehaviour
         matchResultRecorded = false;
         matchResultAutoKickQueued = false;
         ClearPhaseResultFields();
+        ClearPhaseTransitionFields();
         ClearMatchResultFields();
 
         Debug.Log($"[Server] Assigned Roles - King: {p1}, Chess: {p2}");
@@ -149,6 +165,28 @@ public class ServerGameManager : NetworkBehaviour
         return Mathf.Max(1, turnDurationNetworkSeconds > 0 ? turnDurationNetworkSeconds : Mathf.CeilToInt(turnDurationSeconds));
     }
 
+    public bool IsPhaseTransitionActive()
+    {
+        return currentGameState == NetGameState.PhaseTransition;
+    }
+
+    public float GetPhaseTransitionRemainingSeconds()
+    {
+        if (Runner == null || !IsPhaseTransitionActive())
+            return 0f;
+
+        float? remaining = phaseTransitionTimer.RemainingTime(Runner);
+        return Mathf.Max(0f, remaining ?? 0f);
+    }
+
+    public int GetPhaseTransitionDurationSeconds()
+    {
+        if (phaseTransitionDurationNetworkSeconds > 0)
+            return phaseTransitionDurationNetworkSeconds;
+
+        return Mathf.CeilToInt(Mathf.Max(0f, phaseTransitionDelaySeconds));
+    }
+
     public static bool IsTurnState(NetGameState state)
     {
         return state == NetGameState.KingTurn || state == NetGameState.ChessTurn;
@@ -157,6 +195,12 @@ public class ServerGameManager : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
+
+        if (currentGameState == NetGameState.PhaseTransition && phaseTransitionTimer.Expired(Runner))
+        {
+            CompletePhaseTransitionToPhase2();
+            return;
+        }
 
         if (currentGameState == NetGameState.ResolvingAction && !manualResolveInProgress && actionDelayTimer.Expired(Runner))
         {
@@ -205,12 +249,10 @@ public class ServerGameManager : NetworkBehaviour
         }
         else if (newState == NetGameState.PhaseTransition)
         {
-            currentPhase = GamePhase.Phase2;
-            SwapRoles();
-
-            ServerBoardManager.Instance.ClearBoard();
-
-            ChangeState(NetGameState.Setup);
+            // PhaseTransition is now a real, delayed state.
+            // The server keeps Phase 1 board/roles visible for a few seconds so clients can show
+            // "You Win Phase 1" / "You Lose Phase 1" instead of snapping instantly to Phase 2.
+            StopTurnTimer();
         }
     }
 
@@ -342,7 +384,7 @@ public class ServerGameManager : NetworkBehaviour
         {
             phase1Winner = phaseWinner;
             Debug.Log($"[Server Result] Phase 1 ended. Winner={phase1Winner}, Reason={phaseReason}, Phase1Turns={phase1TurnCount}");
-            ChangeState(NetGameState.PhaseTransition);
+            BeginPhaseTransitionToPhase2(phaseWinner, phaseReason);
             return;
         }
 
@@ -398,6 +440,7 @@ public class ServerGameManager : NetworkBehaviour
         matchResultRecorded = false;
         matchResultAutoKickQueued = false;
         ClearPhaseResultFields();
+        ClearPhaseTransitionFields();
         kingPlayer = PlayerRef.None;
         chessPlayer = PlayerRef.None;
         manualResolveInProgress = false;
@@ -409,6 +452,49 @@ public class ServerGameManager : NetworkBehaviour
         currentGameState = NetGameState.Init;
 
         Debug.Log("[Server] Game state reset to lobby/init.");
+    }
+
+    private void BeginPhaseTransitionToPhase2(PlayerRef phaseWinner, string phaseReason)
+    {
+        if (!HasStateAuthority) return;
+
+        phaseTransitionWinner = phaseWinner;
+        phaseTransitionPhaseNumber = 1;
+
+        float delay = enablePhaseTransitionDelay ? Mathf.Max(0f, phaseTransitionDelaySeconds) : 0f;
+        phaseTransitionDurationNetworkSeconds = Mathf.CeilToInt(delay);
+
+        if (delay > 0f)
+            phaseTransitionTimer = TickTimer.CreateFromSeconds(Runner, delay);
+        else
+            phaseTransitionTimer = TickTimer.None;
+
+        Debug.Log($"[Server PhaseTransition] Phase 1 result window started. Winner={phaseWinner}, Reason={phaseReason}, Delay={delay:0.0}s");
+
+        ChangeState(NetGameState.PhaseTransition);
+
+        if (delay <= 0f)
+            CompletePhaseTransitionToPhase2();
+    }
+
+    private void CompletePhaseTransitionToPhase2()
+    {
+        if (!HasStateAuthority) return;
+        if (currentGameState != NetGameState.PhaseTransition) return;
+
+        phaseTransitionTimer = TickTimer.None;
+        phaseTransitionDurationNetworkSeconds = 0;
+
+        currentPhase = GamePhase.Phase2;
+        SwapRoles();
+
+        if (ServerBoardManager.Instance != null)
+            ServerBoardManager.Instance.ClearBoard();
+
+        ClearPhaseTransitionFields();
+
+        Debug.Log("[Server PhaseTransition] Countdown finished. Switching to Phase 2 setup.");
+        ChangeState(NetGameState.Setup);
     }
 
     private void DetermineMatchWinnerFromPhaseResults(string finalPhaseReason)
@@ -492,6 +578,14 @@ public class ServerGameManager : NetworkBehaviour
         phase2Winner = PlayerRef.None;
     }
 
+    private void ClearPhaseTransitionFields()
+    {
+        phaseTransitionTimer = TickTimer.None;
+        phaseTransitionDurationNetworkSeconds = 0;
+        phaseTransitionWinner = PlayerRef.None;
+        phaseTransitionPhaseNumber = 0;
+    }
+
     private void RecordMatchResult(PlayerRef winner, PlayerRef loser, string reason)
     {
         if (!HasStateAuthority) return;
@@ -563,6 +657,7 @@ public class ServerGameManager : NetworkBehaviour
     private void OnStateChanged() { }
     private void OnPhaseChanged() { }
     private void OnTurnTimerChanged() { }
+    private void OnPhaseTransitionChanged() { }
     private void OnMatchResultChanged() { }
 
     public override void Despawned(NetworkRunner runner, bool hasState)

@@ -75,6 +75,10 @@ MonoBehaviour:
   _currentPhase: 0
   _phase1TurnCount: 0
   _phase2TurnCount: 0
+  enablePhaseTransitionDelay: 1
+  phaseTransitionDelaySeconds: 3
+  _phaseTransitionDurationNetworkSeconds: 0
+  _phaseTransitionPhaseNumber: 0
   enableTurnTimer: 1
   turnDurationSeconds: 30
   _turnDurationNetworkSeconds: 0
@@ -83,6 +87,8 @@ MonoBehaviour:
     _data:
       Data: 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
   _matchResultSerial: 0
+  kickAllPlayersAfterGameOver: 1
+  kickAllPlayersAfterGameOverDelaySeconds: 5
   visualResolveTime: 1.5
 --- !u!114 &6269751544342321873
 MonoBehaviour:

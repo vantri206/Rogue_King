@@ -114,6 +114,22 @@ public class MatchPlayerInfoUI : MonoBehaviour
             return;
         }
 
+        if (state == NetGameState.PhaseTransition)
+        {
+            ServerGameManager gameManager = ServerGameManager.Instance;
+            PlayerRef phaseWinner = gameManager != null ? gameManager.phaseTransitionWinner : PlayerRef.None;
+            int phaseNumber = gameManager != null && gameManager.phaseTransitionPhaseNumber > 0 ? gameManager.phaseTransitionPhaseNumber : 1;
+            int remainingSeconds = gameManager != null ? Mathf.CeilToInt(gameManager.GetPhaseTransitionRemainingSeconds()) : 0;
+            string countdown = remainingSeconds > 0 ? $" ({remainingSeconds}s)" : string.Empty;
+
+            if (localPlayer != PlayerRef.None && phaseWinner != PlayerRef.None)
+                turnText.text = localPlayer == phaseWinner ? $"You Win Phase {phaseNumber}{countdown}" : $"You Lose Phase {phaseNumber}{countdown}";
+            else
+                turnText.text = $"Phase {phaseNumber} finished{countdown}";
+
+            return;
+        }
+
         if (state == NetGameState.ResolvingAction)
         {
             turnText.text = "Server resolving...";
@@ -156,7 +172,14 @@ public class MatchPlayerInfoUI : MonoBehaviour
 
         if (gameManager.currentGameState == NetGameState.GameOver)
         {
-            turnTimerText.text = "00";
+            turnTimerText.text = "00:00";
+            return;
+        }
+
+        if (gameManager.currentGameState == NetGameState.PhaseTransition)
+        {
+            int transitionSeconds = Mathf.CeilToInt(gameManager.GetPhaseTransitionRemainingSeconds());
+            turnTimerText.text = FormatTimer(transitionSeconds);
             return;
         }
 
@@ -173,7 +196,9 @@ public class MatchPlayerInfoUI : MonoBehaviour
     private static string FormatTimer(int totalSeconds)
     {
         totalSeconds = Mathf.Max(0, totalSeconds);
-        return $"{totalSeconds:00}";
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return $"{minutes:00}:{seconds:00}";
     }
 
     private static PlayerRef GetTurnPlayer(NetGameState state, PlayerRef kingPlayer, PlayerRef chessPlayer)

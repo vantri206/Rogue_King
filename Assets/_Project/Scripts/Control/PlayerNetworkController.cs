@@ -488,6 +488,23 @@ public class PlayerNetworkController : NetworkBehaviour
             return;
         }
 
+        if (ServerGameManager.Instance != null && ServerGameManager.Instance.currentGameState == NetGameState.PhaseTransition)
+        {
+            // During the Phase 1 -> Phase 2 result countdown, the board must be fully locked.
+            // This prevents dragging/aiming/weapon UI from staying alive while the server is waiting
+            // to swap roles and rebuild the board for Phase 2.
+            if (currentState != ClientInputState.Idle)
+                CancelCurrentInteraction();
+            else
+            {
+                HidePieceContextUI();
+                ClearAllHighlights();
+            }
+
+            ToggleWeaponPanel(false);
+            return;
+        }
+
         switch (currentState)
         {
             case ClientInputState.Idle:
