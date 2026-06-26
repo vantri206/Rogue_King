@@ -2664,13 +2664,13 @@ TextureImporter:
       name: UI assets (1x)_0
       rect:
         serializedVersion: 2
-        x: 6
+        x: 7
         y: 982
-        width: 36
+        width: 35
         height: 36
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
+      border: {x: 8, y: 10, z: 9, w: 10}
       customData: 
       outline: []
       physicsShape: []
@@ -21272,6 +21272,50 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: UI assets (1x)_846
+      rect:
+        serializedVersion: 2
+        x: 305
+        y: 922
+        width: 203
+        height: 102
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 2a073efbf3b9b3341ad6a4ba3dea32e6
+      internalID: -1169602509
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI assets (1x)_847
+      rect:
+        serializedVersion: 2
+        x: 94
+        y: 956
+        width: 18
+        height: 19
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 124afc0d4867233409961e35e2a4badf
+      internalID: -215008657
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -22116,6 +22160,8 @@ TextureImporter:
       UI assets (1x)_843: -1875513207438996539
       UI assets (1x)_844: -5662249929487337371
       UI assets (1x)_845: -6501605810940782037
+      UI assets (1x)_846: -1169602509
+      UI assets (1x)_847: -215008657
       UI assets (1x)_85: 357549343441838412
       UI assets (1x)_86: -7759004727366363961
       UI assets (1x)_87: -1450337822536459506
