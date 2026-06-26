@@ -9,6 +9,7 @@ public class MatchmakingMenuUI : MonoBehaviour
     [Header("References")]
     [SerializeField] private NetworkRunnerHandler runnerHandler;
     [SerializeField] private Button playButton;
+    [SerializeField] private Button createRoomButton;
     [SerializeField] private TMP_InputField roomCodeInput;
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private GameObject rootToHideOnServer;
@@ -60,6 +61,12 @@ public class MatchmakingMenuUI : MonoBehaviour
             playButton.onClick.RemoveListener(OnPlayButtonClicked);
             playButton.onClick.AddListener(OnPlayButtonClicked);
         }
+
+        if (createRoomButton != null)
+        {
+            createRoomButton.onClick.RemoveListener(OnCreateRoomButtonClicked);
+            createRoomButton.onClick.AddListener(OnCreateRoomButtonClicked);
+        }
     }
 
     private async void Start()
@@ -101,6 +108,9 @@ public class MatchmakingMenuUI : MonoBehaviour
         if (playButton != null)
             playButton.onClick.RemoveListener(OnPlayButtonClicked);
 
+        if (createRoomButton != null)
+            createRoomButton.onClick.RemoveListener(OnCreateRoomButtonClicked);
+
         if (lobbyWaitTimeoutCoroutine != null)
         {
             StopCoroutine(lobbyWaitTimeoutCoroutine);
@@ -115,7 +125,11 @@ public class MatchmakingMenuUI : MonoBehaviour
 
         if (useLobbyMatchmaking)
         {
-            RequestMatchFromLobby();
+            string roomCode = GetSanitizedRoomCodeInput();
+            if (string.IsNullOrWhiteSpace(roomCode))
+                RequestMatchFromLobby();
+            else
+                RequestJoinCustomRoomFromLobby(roomCode);
             return;
         }
 
@@ -123,6 +137,20 @@ public class MatchmakingMenuUI : MonoBehaviour
             PlayQuickMatch();
         else
             JoinRoomByCode();
+    }
+
+    private void OnCreateRoomButtonClicked()
+    {
+        if (isMatchmaking)
+            return;
+
+        if (useLobbyMatchmaking)
+        {
+            RequestCreateCustomRoomFromLobby();
+            return;
+        }
+
+        SetStatus("Create Room requires lobby matchmaking mode.");
     }
 
     public async Task<bool> ConnectLobbyForMenuLiveData()
@@ -219,6 +247,107 @@ public class MatchmakingMenuUI : MonoBehaviour
             SetStatus("Could not send find-match request. Check lobby connection and local PlayerController spawn.");
             SetInteractable(true);
             isMatchmaking = false;
+        }
+    }
+
+    public async void RequestCreateCustomRoomFromLobby()
+    {
+        ResolveRunnerHandler();
+
+        if (runnerHandler == null)
+        {
+            SetStatus("Missing NetworkRunnerHandler.");
+            return;
+        }
+
+        isMatchmaking = true;
+        SetInteractable(false);
+
+        if (!runnerHandler.IsClientConnectedToLobby)
+        {
+            bool connected = await ConnectLobbyForMenuLiveData();
+            if (!connected)
+            {
+                SetStatus("Cannot create room because lobby is not connected.");
+                SetInteractable(true);
+                isMatchmaking = false;
+                return;
+            }
+        }
+
+        bool requested = runnerHandler.ClientRequestCreateCustomRoom();
+        if (requested)
+        {
+            SetStatus("Creating room...");
+            StartLobbyWaitTimeout();
+        }
+        else
+        {
+            SetStatus("Could not send create-room request. Check lobby connection and local PlayerController spawn.");
+            SetInteractable(true);
+            isMatchmaking = false;
+        }
+    }
+
+    public async void RequestJoinCustomRoomFromLobby(string roomCode)
+    {
+        ResolveRunnerHandler();
+
+        if (runnerHandler == null)
+        {
+            SetStatus("Missing NetworkRunnerHandler.");
+            return;
+        }
+
+        roomCode = SanitizeRoomCode(roomCode);
+        if (string.IsNullOrWhiteSpace(roomCode))
+        {
+            RequestMatchFromLobby();
+            return;
+        }
+
+        isMatchmaking = true;
+        SetInteractable(false);
+
+        if (!runnerHandler.IsClientConnectedToLobby)
+        {
+            bool connected = await ConnectLobbyForMenuLiveData();
+            if (!connected)
+            {
+                SetStatus("Cannot join room because lobby is not connected.");
+                SetInteractable(true);
+                isMatchmaking = false;
+                return;
+            }
+        }
+
+        bool requested = runnerHandler.ClientRequestJoinCustomRoom(roomCode);
+        if (requested)
+        {
+            SetStatus($"Checking Room ID {roomCode}...");
+            StartLobbyWaitTimeout();
+        }
+        else
+        {
+            SetStatus("Could not send join-room request. Check lobby connection and local PlayerController spawn.");
+            SetInteractable(true);
+            isMatchmaking = false;
+        }
+    }
+
+    public void ShowLobbyRoomError(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            message = "Sai Room ID";
+
+        SetStatus(message);
+        SetInteractable(true);
+        isMatchmaking = false;
+
+        if (lobbyWaitTimeoutCoroutine != null)
+        {
+            StopCoroutine(lobbyWaitTimeoutCoroutine);
+            lobbyWaitTimeoutCoroutine = null;
         }
     }
 
@@ -347,6 +476,35 @@ public class MatchmakingMenuUI : MonoBehaviour
     {
         if (playButton != null)
             playButton.interactable = interactable;
+
+        if (createRoomButton != null)
+            createRoomButton.interactable = interactable;
+    }
+
+    private string GetSanitizedRoomCodeInput()
+    {
+        return roomCodeInput != null ? SanitizeRoomCode(roomCodeInput.text) : string.Empty;
+    }
+
+    private static string SanitizeRoomCode(string roomCode)
+    {
+        if (string.IsNullOrWhiteSpace(roomCode))
+            return string.Empty;
+
+        roomCode = roomCode.Trim();
+        System.Text.StringBuilder builder = new System.Text.StringBuilder(8);
+        for (int i = 0; i < roomCode.Length; i++)
+        {
+            char c = roomCode[i];
+            if (char.IsDigit(c))
+                builder.Append(c);
+        }
+
+        string sanitized = builder.ToString();
+        if (sanitized.Length > 8)
+            sanitized = sanitized.Substring(0, 8);
+
+        return sanitized;
     }
 
     private void SetStatus(string message)

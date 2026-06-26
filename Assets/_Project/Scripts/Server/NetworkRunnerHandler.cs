@@ -83,6 +83,16 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     [Tooltip("Small delay after destroying the lobby runner before creating the match runner on the same bootstrap object.")]
     [SerializeField] private float lobbyJoinDelayAfterShutdownSeconds = 0.25f;
 
+    [Header("Custom Room Codes")]
+    [Tooltip("Demo-friendly custom room code length. 6 means codes like 482913.")]
+    [SerializeField] private int customRoomCodeDigits = 6;
+
+    [Tooltip("Because the current architecture uses one match server process/session, only one waiting custom room should be open at a time for stable demo flow.")]
+    [SerializeField] private bool blockQuickMatchWhileCustomRoomIsWaiting = true;
+
+    [Tooltip("Lobby custom room reservations expire after this many seconds if nobody joins by code. This prevents stale codes from blocking quick match forever.")]
+    [SerializeField] private float customRoomReservationLifetimeSeconds = 180f;
+
     [Header("Editor / ParrelSync Test")]
     [Tooltip("Auto mode: the original Editor becomes the dedicated server; ParrelSync clones become clients.")]
     [SerializeField] private bool originalEditorIsServer = true;
@@ -111,7 +121,20 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     private bool pendingLobbyMatchRequest;
     private bool pendingLeaderboardRefreshRequest;
     private string runtimeSessionOverride;
+    private string pendingRoomCodeForMatch;
+    private string currentRoomCode;
     private readonly List<PlayerRef> lobbyReadyPlayers = new List<PlayerRef>();
+
+    private sealed class LobbyCustomRoomReservation
+    {
+        public PlayerRef Owner;
+        public float CreatedRealtime;
+    }
+
+    private readonly Dictionary<string, LobbyCustomRoomReservation> lobbyCustomRooms = new Dictionary<string, LobbyCustomRoomReservation>();
+    private bool pendingLobbyCreateRoomRequest;
+    private bool pendingLobbyJoinRoomRequest;
+    private string pendingLobbyJoinRoomCode;
 
     private void Awake()
     {
@@ -174,6 +197,22 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             pendingLeaderboardRefreshRequest = false;
             Debug.Log("[Lobby] Sending queued leaderboard refresh request now that local player object is ready.");
             controller.ClientRequestLeaderboardRefresh();
+        }
+
+        if (pendingLobbyCreateRoomRequest)
+        {
+            pendingLobbyCreateRoomRequest = false;
+            Debug.Log("[Lobby] Sending queued custom-room create request now that local player object is ready.");
+            controller.ClientRequestCreateCustomRoomFromLobby();
+        }
+
+        if (pendingLobbyJoinRoomRequest)
+        {
+            string roomCode = pendingLobbyJoinRoomCode;
+            pendingLobbyJoinRoomRequest = false;
+            pendingLobbyJoinRoomCode = null;
+            Debug.Log($"[Lobby] Sending queued custom-room join request for code '{roomCode}' now that local player object is ready.");
+            controller.ClientRequestJoinCustomRoomFromLobby(roomCode);
         }
 
         if (pendingLobbyMatchRequest)
@@ -268,6 +307,54 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return true;
     }
 
+    public bool ClientRequestCreateCustomRoom()
+    {
+        if (!currentRunIsLobby || runner == null || runner.IsServer)
+        {
+            Debug.LogWarning("[Lobby] Cannot create custom room because this client is not connected to the lobby session.");
+            return false;
+        }
+
+        PlayerNetworkController controller = GetLocalPlayerController();
+        if (controller == null)
+        {
+            pendingLobbyCreateRoomRequest = true;
+            Debug.LogWarning("[Lobby] Local PlayerNetworkController is not ready yet. Custom-room create request queued.");
+            return true;
+        }
+
+        pendingLobbyCreateRoomRequest = false;
+        controller.ClientRequestCreateCustomRoomFromLobby();
+        return true;
+    }
+
+    public bool ClientRequestJoinCustomRoom(string roomCode)
+    {
+        if (!currentRunIsLobby || runner == null || runner.IsServer)
+        {
+            Debug.LogWarning("[Lobby] Cannot join custom room because this client is not connected to the lobby session.");
+            return false;
+        }
+
+        roomCode = SanitizeRoomCode(roomCode);
+        if (string.IsNullOrWhiteSpace(roomCode))
+            return ClientRequestLobbyMatchmaking();
+
+        PlayerNetworkController controller = GetLocalPlayerController();
+        if (controller == null)
+        {
+            pendingLobbyJoinRoomRequest = true;
+            pendingLobbyJoinRoomCode = roomCode;
+            Debug.LogWarning($"[Lobby] Local PlayerNetworkController is not ready yet. Join custom-room '{roomCode}' request queued.");
+            return true;
+        }
+
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomCode = null;
+        controller.ClientRequestJoinCustomRoomFromLobby(roomCode);
+        return true;
+    }
+
     public bool ClientRequestLeaderboardRefresh()
     {
         if (runner == null || runner.IsServer || !currentRunIsLobby)
@@ -347,16 +434,21 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
     public void ClientSwitchFromLobbyToMatchSession(string matchSessionName)
     {
+        ClientSwitchFromLobbyToMatchSession(matchSessionName, string.Empty);
+    }
+
+    public void ClientSwitchFromLobbyToMatchSession(string matchSessionName, string roomCode)
+    {
         if (string.IsNullOrWhiteSpace(matchSessionName))
             matchSessionName = lobbyMatchSessionName;
 
         if (clientSwitchingFromLobbyToMatch)
             return;
 
-        StartCoroutine(ClientSwitchFromLobbyToMatchRoutine(matchSessionName.Trim()));
+        StartCoroutine(ClientSwitchFromLobbyToMatchRoutine(matchSessionName.Trim(), SanitizeRoomCode(roomCode)));
     }
 
-    private System.Collections.IEnumerator ClientSwitchFromLobbyToMatchRoutine(string matchSessionName)
+    private System.Collections.IEnumerator ClientSwitchFromLobbyToMatchRoutine(string matchSessionName, string roomCode)
     {
         clientSwitchingFromLobbyToMatch = true;
 
@@ -364,7 +456,10 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             matchSessionName = lobbyMatchSessionName;
 
         matchSessionName = matchSessionName.Trim();
-        Debug.Log($"[Lobby] Match found. Preparing lobby->match switch. Target match session='{matchSessionName}'.");
+        pendingRoomCodeForMatch = roomCode;
+        currentRoomCode = roomCode;
+        ClientMatchRoomContext.SetRoomCode(roomCode);
+        Debug.Log($"[Lobby] Match found. Preparing lobby->match switch. Target match session='{matchSessionName}', RoomCode='{roomCode}'.");
 
         // Important: set the next run state before shutting down the lobby runner.
         // If OnShutdown/OnDisconnected fires during Shutdown(), this flag prevents the normal
@@ -548,6 +643,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         currentRunIsLobby = false;
         pendingLobbyMatchRequest = false;
         pendingLeaderboardRefreshRequest = false;
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomCode = null;
+        pendingRoomCodeForMatch = null;
+        currentRoomCode = string.Empty;
+        ClientMatchRoomContext.Clear();
         runtimeSessionOverride = null;
     }
 
@@ -588,6 +689,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     public int LobbyReadyPlayerCount => lobbyReadyPlayers.Count;
     public bool IsLobbyRunner => currentRunIsLobby;
     public bool IsClientConnectedToLobby => runner != null && !runner.IsServer && currentRunIsLobby;
+    public string CurrentRoomCode => string.IsNullOrWhiteSpace(currentRoomCode) ? ClientMatchRoomContext.CurrentRoomCode : currentRoomCode;
 
     public string CurrentSessionName
     {
@@ -627,7 +729,10 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         builder.AppendLine($"Joinable: {IsCurrentSessionJoinable}");
         builder.AppendLine($"Players: {connectedPlayers.Count}/{maxPlayers}");
         if (currentRunIsLobby)
+        {
             builder.AppendLine($"Lobby Ready Queue: {lobbyReadyPlayers.Count}");
+            builder.AppendLine($"Custom Rooms Waiting: {lobbyCustomRooms.Count}");
+        }
         builder.AppendLine($"Match Started: {matchStarted}");
         builder.AppendLine($"Match Abandoned: {matchAbandoned}");
         builder.AppendLine($"Kick/Reopen Busy: {isKickingAllPlayers}");
@@ -1167,9 +1272,17 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (runner == null || !runner.IsServer || !currentRunIsLobby)
             return false;
 
+        PruneExpiredCustomRooms();
+
         if (!connectedPlayers.Contains(player))
         {
             Debug.LogWarning($"[Lobby] Ignored ready request from non-connected Player {player.PlayerId}.");
+            return false;
+        }
+
+        if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
+        {
+            SendLobbyRoomRequestFailed(player, "A custom room is waiting. Join by Room ID or wait until it expires.");
             return false;
         }
 
@@ -1178,6 +1291,76 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         Debug.Log($"[Lobby] Player {player.PlayerId} is ready. Ready={lobbyReadyPlayers.Count}/2, Connected={connectedPlayers.Count}/{maxPlayers}");
         TryDispatchLobbyMatch();
+        return true;
+    }
+
+    public bool ServerPlayerRequestedCreateCustomRoom(PlayerRef player)
+    {
+        if (runner == null || !runner.IsServer || !currentRunIsLobby)
+            return false;
+
+        PruneExpiredCustomRooms();
+
+        if (!connectedPlayers.Contains(player))
+        {
+            Debug.LogWarning($"[Lobby] Ignored custom-room create request from non-connected Player {player.PlayerId}.");
+            return false;
+        }
+
+        if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
+        {
+            SendLobbyRoomRequestFailed(player, "Another custom room is already waiting. Try again after it is used or expires.");
+            return false;
+        }
+
+        string roomCode = GenerateUniqueRoomCode();
+        lobbyCustomRooms[roomCode] = new LobbyCustomRoomReservation
+        {
+            Owner = player,
+            CreatedRealtime = Time.realtimeSinceStartup
+        };
+
+        lobbyReadyPlayers.Remove(player);
+
+        string sessionName = string.IsNullOrWhiteSpace(lobbyMatchSessionName) ? defaultSessionName : lobbyMatchSessionName.Trim();
+        Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} created room code {roomCode}. Sending creator to match session '{sessionName}'.");
+        SendLobbyMatchFound(player, sessionName, roomCode);
+        return true;
+    }
+
+    public bool ServerPlayerRequestedJoinCustomRoom(PlayerRef player, string roomCode)
+    {
+        if (runner == null || !runner.IsServer || !currentRunIsLobby)
+            return false;
+
+        PruneExpiredCustomRooms();
+        roomCode = SanitizeRoomCode(roomCode);
+
+        if (!connectedPlayers.Contains(player))
+        {
+            Debug.LogWarning($"[Lobby] Ignored custom-room join request from non-connected Player {player.PlayerId}.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(roomCode) || !lobbyCustomRooms.ContainsKey(roomCode))
+        {
+            SendLobbyRoomRequestFailed(player, "Sai Room ID");
+            return false;
+        }
+
+        LobbyCustomRoomReservation reservation = lobbyCustomRooms[roomCode];
+        if (reservation.Owner == player)
+        {
+            SendLobbyRoomRequestFailed(player, "You are already the owner of this room.");
+            return false;
+        }
+
+        lobbyCustomRooms.Remove(roomCode);
+        lobbyReadyPlayers.Remove(player);
+
+        string sessionName = string.IsNullOrWhiteSpace(lobbyMatchSessionName) ? defaultSessionName : lobbyMatchSessionName.Trim();
+        Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} joined room code {roomCode}. Sending joiner to match session '{sessionName}'.");
+        SendLobbyMatchFound(player, sessionName, roomCode);
         return true;
     }
 
@@ -1200,6 +1383,11 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (!currentRunIsLobby)
             return;
 
+        PruneExpiredCustomRooms();
+
+        if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
+            return;
+
         lobbyReadyPlayers.RemoveAll(player => !connectedPlayers.Contains(player));
 
         if (lobbyReadyPlayers.Count < 2)
@@ -1212,11 +1400,11 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         string sessionName = string.IsNullOrWhiteSpace(lobbyMatchSessionName) ? defaultSessionName : lobbyMatchSessionName.Trim();
 
         Debug.Log($"[Lobby] Matched Player {p1.PlayerId} + Player {p2.PlayerId}. Sending both to match session '{sessionName}'.");
-        SendLobbyMatchFound(p1, sessionName);
-        SendLobbyMatchFound(p2, sessionName);
+        SendLobbyMatchFound(p1, sessionName, string.Empty);
+        SendLobbyMatchFound(p2, sessionName, string.Empty);
     }
 
-    private void SendLobbyMatchFound(PlayerRef player, string sessionName)
+    private void SendLobbyMatchFound(PlayerRef player, string sessionName, string roomCode)
     {
         NetworkObject playerObject = runner != null ? runner.GetPlayerObject(player) : null;
         PlayerNetworkController controller = playerObject != null ? playerObject.GetComponent<PlayerNetworkController>() : null;
@@ -1226,7 +1414,86 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
-        controller.ServerSendLobbyMatchFound(sessionName);
+        controller.ServerSendLobbyMatchFound(sessionName, roomCode);
+    }
+
+    private void SendLobbyRoomRequestFailed(PlayerRef player, string message)
+    {
+        NetworkObject playerObject = runner != null ? runner.GetPlayerObject(player) : null;
+        PlayerNetworkController controller = playerObject != null ? playerObject.GetComponent<PlayerNetworkController>() : null;
+        if (controller == null)
+        {
+            Debug.LogWarning($"[Lobby] Cannot send custom-room error to Player {player.PlayerId}: PlayerNetworkController missing. Message={message}");
+            return;
+        }
+
+        controller.ServerSendLobbyRoomRequestFailed(message);
+    }
+
+    private string GenerateUniqueRoomCode()
+    {
+        int digits = Mathf.Clamp(customRoomCodeDigits, 4, 8);
+        int min = 1;
+        for (int i = 1; i < digits; i++) min *= 10;
+        int maxExclusive = min * 10;
+
+        for (int attempt = 0; attempt < 32; attempt++)
+        {
+            string code = UnityEngine.Random.Range(min, maxExclusive).ToString();
+            if (!lobbyCustomRooms.ContainsKey(code))
+                return code;
+        }
+
+        return UnityEngine.Random.Range(min, maxExclusive).ToString();
+    }
+
+    private void PruneExpiredCustomRooms()
+    {
+        if (lobbyCustomRooms.Count == 0)
+            return;
+
+        float lifetime = Mathf.Max(30f, customRoomReservationLifetimeSeconds);
+        float now = Time.realtimeSinceStartup;
+        List<string> expired = null;
+
+        foreach (var kvp in lobbyCustomRooms)
+        {
+            if (now - kvp.Value.CreatedRealtime > lifetime)
+            {
+                if (expired == null) expired = new List<string>();
+                expired.Add(kvp.Key);
+            }
+        }
+
+        if (expired == null)
+            return;
+
+        for (int i = 0; i < expired.Count; i++)
+        {
+            lobbyCustomRooms.Remove(expired[i]);
+            Debug.Log($"[Lobby CustomRoom] Expired room code {expired[i]}.");
+        }
+    }
+
+    private static string SanitizeRoomCode(string roomCode)
+    {
+        if (string.IsNullOrWhiteSpace(roomCode))
+            return string.Empty;
+
+        roomCode = roomCode.Trim();
+        System.Text.StringBuilder builder = new System.Text.StringBuilder(8);
+        for (int i = 0; i < roomCode.Length; i++)
+        {
+            char c = roomCode[i];
+            if (char.IsDigit(c))
+                builder.Append(c);
+        }
+
+        string sanitized = builder.ToString();
+        if (sanitized.Length > 8)
+            sanitized = sanitized.Substring(0, 8);
+
+        return sanitized;
     }
 
     private void SpawnPlayerControllerIfNeeded(NetworkRunner activeRunner, PlayerRef player)
@@ -1417,6 +1684,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         currentRunIsLobby = false;
         pendingLobbyMatchRequest = false;
         pendingLeaderboardRefreshRequest = false;
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomCode = null;
+        pendingRoomCodeForMatch = null;
+        currentRoomCode = string.Empty;
+        ClientMatchRoomContext.Clear();
         runtimeSessionOverride = null;
 
         int sceneIndex = Mathf.Max(0, menuSceneBuildIndex);

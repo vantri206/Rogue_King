@@ -76,7 +76,7 @@ MonoBehaviour:
   _phase1TurnCount: 0
   _phase2TurnCount: 0
   enablePhaseTransitionDelay: 1
-  phaseTransitionDelaySeconds: 3
+  phaseTransitionDelaySeconds: 5
   _phaseTransitionDurationNetworkSeconds: 0
   _phaseTransitionPhaseNumber: 0
   enableTurnTimer: 1
@@ -122,10 +122,14 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 678351198be7c744da6d43ec0ab4f797, type: 2}
   - {fileID: 11400000, guid: de9d7caac4bf0414c99f774e555e9baf, type: 2}
   - {fileID: 11400000, guid: 1dec8110b38ec754fbb2b76b231046af, type: 2}
+  - {fileID: 11400000, guid: 0354e2566765f244886f194a6f16a6a4, type: 2}
   fallbackDamageDelaySeconds: 1
   grenadeAutoDamageDelaySeconds: 1.35
   shotgunAutoDamageDelaySeconds: 0.9
   maxAutoDamageDelaySeconds: 2
+  hiddenMinePlaceDelaySeconds: 0.75
+  hiddenMineExplosionDamageDelaySeconds: 0.45
+  hiddenMineExplosionOffset: {x: 0, y: 0.35, z: 0}
 --- !u!114 &-3966902962346141956
 MonoBehaviour:
   m_ObjectHideFlags: 0

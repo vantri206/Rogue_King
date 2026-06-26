@@ -46,6 +46,11 @@ public class PlayerNetworkController : NetworkBehaviour
     [Networked] public int LastEloDelta { get; set; }
     [Networked] public NetworkBool IsProfileReady { get; set; }
 
+    private const int MaxWeaponCooldownSlots = 8;
+
+    [Networked, Capacity(MaxWeaponCooldownSlots), OnChangedRender(nameof(OnWeaponCooldownsChanged))]
+    public NetworkArray<int> WeaponCooldowns { get; }
+
     [Header("Debug")]
     [SerializeField] private bool debugInputLogs = true;
 
@@ -303,6 +308,23 @@ public class PlayerNetworkController : NetworkBehaviour
         Rpc_RequestFindMatchFromLobby();
     }
 
+    public void ClientRequestCreateCustomRoomFromLobby()
+    {
+        if (!HasInputAuthority)
+            return;
+
+        Rpc_RequestCreateCustomRoomFromLobby();
+    }
+
+    public void ClientRequestJoinCustomRoomFromLobby(string roomCode)
+    {
+        if (!HasInputAuthority)
+            return;
+
+        string safeCode = SanitizeRoomCode(roomCode);
+        Rpc_RequestJoinCustomRoomFromLobby(safeCode);
+    }
+
     public void ClientRequestLeaderboardRefresh()
     {
         if (!HasInputAuthority)
@@ -322,6 +344,26 @@ public class PlayerNetworkController : NetworkBehaviour
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_RequestCreateCustomRoomFromLobby(RpcInfo info = default)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (NetworkRunnerHandler.Active != null)
+            NetworkRunnerHandler.Active.ServerPlayerRequestedCreateCustomRoom(info.Source);
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_RequestJoinCustomRoomFromLobby(NetworkString<_32> roomCode, RpcInfo info = default)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (NetworkRunnerHandler.Active != null)
+            NetworkRunnerHandler.Active.ServerPlayerRequestedJoinCustomRoom(info.Source, roomCode.ToString());
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
     private void Rpc_RequestLeaderboardRefresh(RpcInfo info = default)
     {
         if (!HasStateAuthority)
@@ -333,6 +375,11 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public void ServerSendLobbyMatchFound(string matchSessionName)
     {
+        ServerSendLobbyMatchFound(matchSessionName, string.Empty);
+    }
+
+    public void ServerSendLobbyMatchFound(string matchSessionName, string roomCode)
+    {
         if (!HasStateAuthority)
             return;
 
@@ -340,15 +387,61 @@ public class PlayerNetworkController : NetworkBehaviour
         if (safeSession.Length > 32)
             safeSession = safeSession.Substring(0, 32);
 
-        Rpc_LobbyMatchFound(safeSession);
+        string safeRoomCode = SanitizeRoomCode(roomCode);
+        Rpc_LobbyMatchFound(safeSession, safeRoomCode);
+    }
+
+    public void ServerSendLobbyRoomRequestFailed(string message)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        string safeMessage = string.IsNullOrWhiteSpace(message) ? "Sai Room ID" : message.Trim();
+        if (safeMessage.Length > 64)
+            safeMessage = safeMessage.Substring(0, 64);
+
+        Rpc_LobbyRoomRequestFailed(safeMessage);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
-    private void Rpc_LobbyMatchFound(NetworkString<_32> matchSessionName)
+    private void Rpc_LobbyMatchFound(NetworkString<_32> matchSessionName, NetworkString<_32> roomCode)
     {
         string session = matchSessionName.ToString();
+        string code = SanitizeRoomCode(roomCode.ToString());
+        ClientMatchRoomContext.SetRoomCode(code);
         if (NetworkRunnerHandler.Active != null)
-            NetworkRunnerHandler.Active.ClientSwitchFromLobbyToMatchSession(session);
+            NetworkRunnerHandler.Active.ClientSwitchFromLobbyToMatchSession(session, code);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void Rpc_LobbyRoomRequestFailed(NetworkString<_64> message)
+    {
+        MatchmakingMenuUI menu = FindFirstObjectByType<MatchmakingMenuUI>(FindObjectsInactive.Include);
+        if (menu != null)
+            menu.ShowLobbyRoomError(message.ToString());
+        else
+            Debug.LogWarning($"[Lobby] Room request failed: {message}");
+    }
+
+    private static string SanitizeRoomCode(string roomCode)
+    {
+        if (string.IsNullOrWhiteSpace(roomCode))
+            return string.Empty;
+
+        roomCode = roomCode.Trim();
+        System.Text.StringBuilder builder = new System.Text.StringBuilder(8);
+        for (int i = 0; i < roomCode.Length; i++)
+        {
+            char c = roomCode[i];
+            if (char.IsDigit(c))
+                builder.Append(c);
+        }
+
+        string sanitized = builder.ToString();
+        if (sanitized.Length > 8)
+            sanitized = sanitized.Substring(0, 8);
+
+        return sanitized;
     }
 
     private static string ResolveFallbackServerName(string sanitizedName, string guestId, PlayerRef source)
@@ -475,6 +568,7 @@ public class PlayerNetworkController : NetworkBehaviour
         TrySubmitLocalProfileToServer();
         ResolveSceneReferences();
         InitializeWeaponUIIfPossible();
+        RefreshWeaponCooldownUI();
         UpdateLocalRoleAndTurnUI();
 
         if (ServerGameManager.Instance != null && ServerGameManager.Instance.currentGameState == NetGameState.GameOver)
@@ -483,23 +577,6 @@ public class PlayerNetworkController : NetworkBehaviour
 
             if (currentState != ClientInputState.Idle)
                 CancelCurrentInteraction();
-
-            ToggleWeaponPanel(false);
-            return;
-        }
-
-        if (ServerGameManager.Instance != null && ServerGameManager.Instance.currentGameState == NetGameState.PhaseTransition)
-        {
-            // During the Phase 1 -> Phase 2 result countdown, the board must be fully locked.
-            // This prevents dragging/aiming/weapon UI from staying alive while the server is waiting
-            // to swap roles and rebuild the board for Phase 2.
-            if (currentState != ClientInputState.Idle)
-                CancelCurrentInteraction();
-            else
-            {
-                HidePieceContextUI();
-                ClearAllHighlights();
-            }
 
             ToggleWeaponPanel(false);
             return;
@@ -628,6 +705,7 @@ public class PlayerNetworkController : NetworkBehaviour
             weaponUI.SetupWeaponSlots(equippedWeapons);
             weaponUI.UpdateActiveWeaponHighlight(currentSelectedWeaponIndex);
             weaponUI.SetActionMode(currentState == ClientInputState.ConfirmingAttack);
+            RefreshWeaponCooldownUI();
 
             weaponSlotsConfigured = true;
             configuredWeaponCount = equippedWeapons.Count;
@@ -1188,6 +1266,13 @@ public class PlayerNetworkController : NetworkBehaviour
 
         if (currentState == ClientInputState.Idle)
         {
+            if (IsWeaponOnCooldown(currentSelectedWeaponIndex))
+            {
+                if (debugInputLogs)
+                    Debug.Log($"[Client Input] Ignored Attack button: weapon {currentSelectedWeaponIndex} is on cooldown.");
+                return;
+            }
+
             StartAimingAttack();
             return;
         }
@@ -1213,6 +1298,14 @@ public class PlayerNetworkController : NetworkBehaviour
 
         Vector2Int requestTarget = lockedAttackTarget;
         int requestWeaponIndex = currentSelectedWeaponIndex;
+
+        if (IsWeaponOnCooldown(requestWeaponIndex))
+        {
+            attackRequestPending = false;
+            if (debugInputLogs)
+                Debug.Log($"[Client Input] Cancelled attack request: weapon {requestWeaponIndex} is on cooldown.");
+            return;
+        }
 
         Debug.Log($"[Client Input] Requesting attack target={requestTarget}, weaponIndex={requestWeaponIndex}");
         Rpc_RequestAttack(requestTarget, requestWeaponIndex);
@@ -1257,6 +1350,14 @@ public class PlayerNetworkController : NetworkBehaviour
         ClearAllHighlights();
 
         WeaponData activeWeapon = GetActiveWeapon();
+        if (IsWeaponOnCooldown(currentSelectedWeaponIndex))
+        {
+            if (debugInputLogs)
+                Debug.Log($"[Client Input] Cannot aim weapon {currentSelectedWeaponIndex}: cooldown={GetWeaponCooldown(currentSelectedWeaponIndex)}.");
+            currentState = ClientInputState.Idle;
+            return;
+        }
+
         NetworkChessPiece kingPiece = FindRogueKingPiece();
         BoardData previewBoard = BuildClientPreviewBoard(out _);
 
@@ -1306,6 +1407,14 @@ public class PlayerNetworkController : NetworkBehaviour
         ClearHighlightTiles(currentAoETiles);
 
         WeaponData activeWeapon = GetActiveWeapon();
+        if (IsWeaponOnCooldown(currentSelectedWeaponIndex))
+        {
+            if (debugInputLogs)
+                Debug.Log($"[Client Input] Cannot aim weapon {currentSelectedWeaponIndex}: cooldown={GetWeaponCooldown(currentSelectedWeaponIndex)}.");
+            currentState = ClientInputState.Idle;
+            return;
+        }
+
         NetworkChessPiece kingPiece = FindRogueKingPiece();
         BoardData previewBoard = BuildClientPreviewBoard(out _);
 
@@ -1329,6 +1438,67 @@ public class PlayerNetworkController : NetworkBehaviour
 
         currentSelectedWeaponIndex = Mathf.Clamp(currentSelectedWeaponIndex, 0, equippedWeapons.Count - 1);
         return equippedWeapons[currentSelectedWeaponIndex];
+    }
+
+    public int GetWeaponCooldown(int weaponIndex)
+    {
+        if (weaponIndex < 0 || weaponIndex >= WeaponCooldowns.Length)
+            return 0;
+
+        return Mathf.Max(0, WeaponCooldowns[weaponIndex]);
+    }
+
+    public void ServerStartWeaponCooldown(int weaponIndex, int cooldownTurns)
+    {
+        if (!HasStateAuthority) return;
+        if (weaponIndex < 0 || weaponIndex >= WeaponCooldowns.Length) return;
+
+        WeaponCooldowns.Set(weaponIndex, Mathf.Max(0, cooldownTurns));
+    }
+
+    public void TickWeaponCooldowns()
+    {
+        if (!HasStateAuthority) return;
+
+        for (int i = 0; i < WeaponCooldowns.Length; i++)
+        {
+            int cooldown = WeaponCooldowns[i];
+            if (cooldown > 0)
+                WeaponCooldowns.Set(i, cooldown - 1);
+        }
+    }
+
+    public void ClearWeaponCooldowns()
+    {
+        if (!HasStateAuthority) return;
+
+        for (int i = 0; i < WeaponCooldowns.Length; i++)
+            WeaponCooldowns.Set(i, 0);
+    }
+
+    private void RefreshWeaponCooldownUI()
+    {
+        if (weaponUI == null)
+            return;
+
+        List<int> cooldowns = new List<int>();
+        int count = equippedWeapons != null ? equippedWeapons.Count : 0;
+        count = Mathf.Min(count, WeaponCooldowns.Length);
+
+        for (int i = 0; i < count; i++)
+            cooldowns.Add(Mathf.Max(0, WeaponCooldowns[i]));
+
+        weaponUI.SetWeaponCooldowns(cooldowns);
+    }
+
+    private bool IsWeaponOnCooldown(int weaponIndex)
+    {
+        return GetWeaponCooldown(weaponIndex) > 0;
+    }
+
+    private void OnWeaponCooldownsChanged()
+    {
+        RefreshWeaponCooldownUI();
     }
 
     private void CancelCurrentInteraction()
@@ -1585,7 +1755,11 @@ public class PlayerNetworkController : NetworkBehaviour
             return;
         }
 
-        bool shouldEndTurn = ServerCombatManager.Instance.ProcessAttack(targetPos, weaponIndex);
+        WeaponData weapon = ServerCombatManager.Instance.GetWeaponDataByIndex(weaponIndex);
+        if (weapon != null && weapon.cooldownTurns > 0)
+            ServerStartWeaponCooldown(weaponIndex, weapon.cooldownTurns);
+
+        bool shouldEndTurn = ServerCombatManager.Instance.ProcessAttack(requestingPlayer, targetPos, weaponIndex);
 
         if (shouldEndTurn)
         {

@@ -9,7 +9,16 @@ using System.Collections.Generic;
 public class WeaponSlotUI
 {
     public Button slotButton;
+
+    [Tooltip("Dim/highlight overlay used for inactive, non-selected slots. Kept for backward compatibility with the old UI.")]
     public GameObject weaponOverlay;
+
+    [Tooltip("Overlay shown when this weapon is on cooldown. This should sit above the icon/name.")]
+    public GameObject cooldownOverlay;
+
+    [Tooltip("Text shown on top of the cooldown overlay, usually a remaining turn count.")]
+    public TextMeshProUGUI cooldownText;
+
     public TextMeshProUGUI weaponNameText;
     public Image weaponIcon;
 }
@@ -32,6 +41,10 @@ public class WeaponControllerUI : MonoBehaviour
     private bool unityButtonEventsBound;
     private UnityAction actionButtonHandler;
     private UnityAction[] weaponSlotHandlers;
+
+    private readonly List<int> currentCooldowns = new List<int>();
+    private bool[] slotHasWeapon;
+    private bool isConfirmingAction;
 
     private void Awake()
     {
@@ -120,6 +133,9 @@ public class WeaponControllerUI : MonoBehaviour
     {
         if (weaponSlots == null) return;
 
+        slotHasWeapon = new bool[weaponSlots.Length];
+        EnsureCooldownListSize(weaponSlots.Length);
+
         for (int i = 0; i < weaponSlots.Length; i++)
         {
             WeaponSlotUI slot = weaponSlots[i];
@@ -127,6 +143,7 @@ public class WeaponControllerUI : MonoBehaviour
 
             WeaponData weapon = weapons != null && i < weapons.Count ? weapons[i] : null;
             bool hasWeapon = weapon != null;
+            slotHasWeapon[i] = hasWeapon;
 
             if (slot.slotButton != null)
             {
@@ -148,10 +165,10 @@ public class WeaponControllerUI : MonoBehaviour
             }
 
             if (slot.weaponOverlay != null)
-            {
                 slot.weaponOverlay.SetActive(false);
-            }
         }
+
+        RefreshCooldownVisuals();
     }
 
     public void UpdateActiveWeaponHighlight(int activeIndex)
@@ -168,6 +185,7 @@ public class WeaponControllerUI : MonoBehaviour
             if (slot.weaponOverlay != null)
             {
                 // Overlay is treated as a dim layer for inactive slots.
+                // Cooldown has its own overlay so inactive highlight and cooldown can coexist.
                 slot.weaponOverlay.SetActive(slotIsVisible && i != activeIndex);
             }
         }
@@ -175,19 +193,69 @@ public class WeaponControllerUI : MonoBehaviour
 
     public void SetActionMode(bool isConfirming)
     {
+        isConfirmingAction = isConfirming;
+
         if (actionButtonText != null)
+            actionButtonText.text = isConfirming ? "FIRE!" : "ATK";
+
+        RefreshCooldownVisuals();
+    }
+
+    public void SetWeaponCooldowns(IReadOnlyList<int> cooldowns)
+    {
+        int targetCount = weaponSlots != null ? weaponSlots.Length : 0;
+        EnsureCooldownListSize(targetCount);
+
+        for (int i = 0; i < currentCooldowns.Count; i++)
         {
-            actionButtonText.text = isConfirming ? "FIRE!" : "ATTACK";
+            int value = cooldowns != null && i < cooldowns.Count ? cooldowns[i] : 0;
+            currentCooldowns[i] = Mathf.Max(0, value);
         }
 
+        RefreshCooldownVisuals();
+    }
+
+    public bool IsWeaponOnCooldown(int weaponIndex)
+    {
+        return weaponIndex >= 0 && weaponIndex < currentCooldowns.Count && currentCooldowns[weaponIndex] > 0;
+    }
+
+    private void EnsureCooldownListSize(int size)
+    {
+        size = Mathf.Max(0, size);
+        while (currentCooldowns.Count < size)
+            currentCooldowns.Add(0);
+
+        while (currentCooldowns.Count > size)
+            currentCooldowns.RemoveAt(currentCooldowns.Count - 1);
+    }
+
+    private void RefreshCooldownVisuals()
+    {
         if (weaponSlots == null) return;
 
-        foreach (WeaponSlotUI slot in weaponSlots)
+        EnsureCooldownListSize(weaponSlots.Length);
+
+        for (int i = 0; i < weaponSlots.Length; i++)
         {
-            if (slot != null && slot.slotButton != null && slot.slotButton.gameObject.activeSelf)
+            WeaponSlotUI slot = weaponSlots[i];
+            if (slot == null) continue;
+
+            bool hasWeapon = slotHasWeapon != null && i < slotHasWeapon.Length && slotHasWeapon[i];
+            int cooldown = i < currentCooldowns.Count ? currentCooldowns[i] : 0;
+            bool onCooldown = hasWeapon && cooldown > 0;
+
+            if (slot.cooldownOverlay != null)
+                slot.cooldownOverlay.SetActive(onCooldown);
+
+            if (slot.cooldownText != null)
             {
-                slot.slotButton.interactable = !isConfirming;
+                slot.cooldownText.text = onCooldown ? cooldown.ToString() : string.Empty;
+                slot.cooldownText.gameObject.SetActive(onCooldown);
             }
+
+            if (slot.slotButton != null && slot.slotButton.gameObject.activeSelf)
+                slot.slotButton.interactable = hasWeapon && !isConfirmingAction && !onCooldown;
         }
     }
 }

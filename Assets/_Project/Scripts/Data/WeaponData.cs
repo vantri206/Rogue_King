@@ -9,6 +9,12 @@ public enum WeaponVFXProjectileMode
     MultiToMaxRangeTiles
 }
 
+public enum WeaponSpecialType
+{
+    None,
+    HiddenMine
+}
+
 [CreateAssetMenu(fileName = "NewWeaponData", menuName = "Chess/Weapon Data")]
 public class WeaponData : ScriptableObject
 {
@@ -25,6 +31,29 @@ public class WeaponData : ScriptableObject
     public bool isOriginRelative = false;
 
     public AnimationCurve damageFalloff = AnimationCurve.Linear(0f, 1f, 1f, 1f);
+
+    [Header("Cooldown")]
+    [Tooltip("Cooldown tính theo số lượt KingTurn của player dùng vũ khí. 0 = không cooldown.")]
+    public int cooldownTurns = 0;
+
+    [Header("Special Weapon Behaviour")]
+    [Tooltip("None = gây damage ngay như vũ khí cũ. HiddenMine = bắn/đặt mìn ẩn, không gây damage ngay; mìn nổ khi quân Chess Alliance đi qua/đứng lên ô đó.")]
+    public WeaponSpecialType specialType = WeaponSpecialType.None;
+
+    [Tooltip("Chỉ dùng cho HiddenMine. Nếu bật, chỉ cho đặt mìn vào ô đang trống để tránh nổ/đè lên quân ngay lúc đặt.")]
+    public bool hiddenMineRequireEmptyTarget = true;
+
+    [Tooltip("Chỉ dùng cho HiddenMine. Damage gây ra khi mìn nổ. Nếu <= 0 thì dùng Base Damage.")]
+    public int hiddenMineDamage = 0;
+
+    [Tooltip("Chỉ dùng cho HiddenMine. Bán kính AoE theo Chebyshev distance. 0 = chỉ ô mìn, 1 = 3x3 quanh mìn.")]
+    public int hiddenMineAOERange = 1;
+
+    [Tooltip("Chỉ dùng cho HiddenMine. Nếu gán prefab này, khi mìn nổ sẽ spawn VFX ở ô mìn. Nếu để trống sẽ dùng Destroyed Effect Prefab/default hit effect.")]
+    public GameObject hiddenMineExplosionPrefab;
+
+    [Tooltip("Chỉ dùng cho HiddenMine. Âm phát tại ô mìn khi nổ. Nếu để trống có thể dùng âm trên prefab SimpleAnimation.")]
+    public AudioClip hiddenMineExplosionSfx;
 
     [HideInInspector] public List<Vector2Int> targetingPattern = new List<Vector2Int>();
     [HideInInspector] public List<Vector2Int> effectPattern = new List<Vector2Int>();

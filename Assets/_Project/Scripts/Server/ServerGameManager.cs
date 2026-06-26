@@ -110,6 +110,8 @@ public class ServerGameManager : NetworkBehaviour
         ClearPhaseResultFields();
         ClearPhaseTransitionFields();
         ClearMatchResultFields();
+        ClearPlayerWeaponCooldowns(p1);
+        ClearPlayerWeaponCooldowns(p2);
 
         Debug.Log($"[Server] Assigned Roles - King: {p1}, Chess: {p2}");
     }
@@ -250,7 +252,7 @@ public class ServerGameManager : NetworkBehaviour
         else if (newState == NetGameState.PhaseTransition)
         {
             // PhaseTransition is now a real, delayed state.
-            // The server keeps Phase 1 board/roles visible for a few seconds so clients can show
+            // Keep Phase 1 board/roles visible for a few seconds so clients can show
             // "You Win Phase 1" / "You Lose Phase 1" instead of snapping instantly to Phase 2.
             StopTurnTimer();
         }
@@ -300,6 +302,7 @@ public class ServerGameManager : NetworkBehaviour
 
             ServerBoardManager.Instance.TickTurnTimers(ChessFaction.ChessRogue);
             TickPlayerCardCooldowns(kingPlayer);
+            TickPlayerWeaponCooldowns(kingPlayer);
             TriggerResolvePhase(NetGameState.KingTurn);
         }
     }
@@ -315,6 +318,31 @@ public class ServerGameManager : NetworkBehaviour
                 if (controller != null) controller.TickCardCooldowns();
             }
         }
+    }
+
+    private void TickPlayerWeaponCooldowns(PlayerRef player)
+    {
+        if (player == PlayerRef.None)
+            return;
+
+        var playerObj = Runner.GetPlayerObject(player);
+        if (playerObj == null)
+            return;
+
+        var controller = playerObj.GetComponent<PlayerNetworkController>();
+        if (controller != null)
+            controller.TickWeaponCooldowns();
+    }
+
+    private void ClearPlayerWeaponCooldowns(PlayerRef player)
+    {
+        if (player == PlayerRef.None)
+            return;
+
+        var playerObj = Runner != null ? Runner.GetPlayerObject(player) : null;
+        var controller = playerObj != null ? playerObj.GetComponent<PlayerNetworkController>() : null;
+        if (controller != null)
+            controller.ClearWeaponCooldowns();
     }
 
     public void BeginManualResolve(NetGameState nextState)

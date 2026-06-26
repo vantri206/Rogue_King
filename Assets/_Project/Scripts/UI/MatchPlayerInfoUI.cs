@@ -172,7 +172,7 @@ public class MatchPlayerInfoUI : MonoBehaviour
 
         if (gameManager.currentGameState == NetGameState.GameOver)
         {
-            turnTimerText.text = "00:00";
+            turnTimerText.text = "00";
             return;
         }
 
@@ -196,9 +196,8 @@ public class MatchPlayerInfoUI : MonoBehaviour
     private static string FormatTimer(int totalSeconds)
     {
         totalSeconds = Mathf.Max(0, totalSeconds);
-        int minutes = totalSeconds / 60;
-        int seconds = totalSeconds % 60;
-        return $"{minutes:00}:{seconds:00}";
+        int seconds = totalSeconds;
+        return $"{seconds:00}";
     }
 
     private static PlayerRef GetTurnPlayer(NetGameState state, PlayerRef kingPlayer, PlayerRef chessPlayer)
