@@ -17,8 +17,24 @@ public class ServerCombatManager : NetworkBehaviour
     [SerializeField] private float shotgunAutoDamageDelaySeconds = 0.9f;
     [SerializeField] private float maxAutoDamageDelaySeconds = 2.0f;
 
+    [Header("Hidden Mine")]
+    [SerializeField] private float hiddenMinePlaceDelaySeconds = 0.75f;
+    [SerializeField] private float hiddenMineExplosionDamageDelaySeconds = 0.45f;
+    [SerializeField] private Vector3 hiddenMineExplosionOffset = new Vector3(0f, 0.35f, 0f);
+
+    private struct HiddenMineInstance
+    {
+        public Vector2Int GridPos;
+        public PlayerRef Owner;
+        public int WeaponIndex;
+        public int Damage;
+        public int AoERange;
+    }
+
+    private readonly List<HiddenMineInstance> hiddenMines = new List<HiddenMineInstance>();
     private bool attackResolutionInProgress;
     private Coroutine pendingAttackCoroutine;
+    private Coroutine pendingMineCoroutine;
 
     public IReadOnlyList<WeaponData> AvailableWeapons => availableWeapons;
     public bool IsAttackResolutionInProgress => attackResolutionInProgress;
@@ -53,6 +69,12 @@ public class ServerCombatManager : NetworkBehaviour
 
         if (weaponIndex < 0 || availableWeapons == null || weaponIndex >= availableWeapons.Count) return false;
 
+        if (TryGetPlayerController(requestingPlayer, out PlayerNetworkController controller) && controller.GetWeaponCooldown(weaponIndex) > 0)
+        {
+            Debug.Log($"[Server Combat] Rejected weapon {weaponIndex} from {requestingPlayer}: cooldown={controller.GetWeaponCooldown(weaponIndex)}");
+            return false;
+        }
+
         NetworkChessPiece kingPiece = FindRogueKingPiece();
         if (kingPiece == null) return false;
 
@@ -64,7 +86,19 @@ public class ServerCombatManager : NetworkBehaviour
             ServerBoardManager.Instance.logicBoard
         );
 
-        return validTargets.Contains(targetPos);
+        if (!validTargets.Contains(targetPos))
+            return false;
+
+        if (usedWeapon.specialType == WeaponSpecialType.HiddenMine)
+        {
+            if (usedWeapon.hiddenMineRequireEmptyTarget && ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
+                return false;
+
+            if (HasHiddenMineAt(targetPos))
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -72,7 +106,7 @@ public class ServerCombatManager : NetworkBehaviour
     /// Damage/despawn is intentionally delayed until the client VFX should have completed.
     /// Returns false because this method owns resolving/end-turn timing asynchronously.
     /// </summary>
-    public bool ProcessAttack(Vector2Int targetPos, int weaponIndex)
+    public bool ProcessAttack(PlayerRef requestingPlayer, Vector2Int targetPos, int weaponIndex)
     {
         if (!HasStateAuthority) return false;
         if (attackResolutionInProgress) return false;
@@ -84,6 +118,9 @@ public class ServerCombatManager : NetworkBehaviour
         if (kingPiece == null) return false;
 
         WeaponData usedWeapon = availableWeapons[weaponIndex];
+
+        if (usedWeapon.specialType == WeaponSpecialType.HiddenMine)
+            return ProcessHiddenMinePlacement(requestingPlayer, kingPiece.currentGridPos, targetPos, usedWeapon, weaponIndex);
 
         Dictionary<Vector2Int, List<CombatEffect>> effectMap = ActionResolver.CalculateWeaponGrid(
             usedWeapon,
@@ -104,6 +141,68 @@ public class ServerCombatManager : NetworkBehaviour
         Debug.Log($"[Server Combat] Queued attack {usedWeapon.weaponName} at {targetPos}. Damage will apply after {damageDelay:0.00}s so VFX can finish first.");
 
         return false;
+    }
+
+    private bool ProcessHiddenMinePlacement(PlayerRef owner, Vector2Int startPos, Vector2Int targetPos, WeaponData usedWeapon, int weaponIndex)
+    {
+        if (usedWeapon.hiddenMineRequireEmptyTarget && ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
+            return false;
+
+        if (HasHiddenMineAt(targetPos))
+            return false;
+
+        float placeDelay = usedWeapon.serverDamageDelaySeconds > 0f
+            ? usedWeapon.serverDamageDelaySeconds
+            : Mathf.Max(0.05f, hiddenMinePlaceDelaySeconds + Vector2Int.Distance(startPos, targetPos) * 0.05f);
+
+        attackResolutionInProgress = true;
+        ServerGameManager.Instance.BeginManualResolve(NetGameState.ChessTurn);
+
+        Rpc_PlayCombatVFX(startPos, targetPos, weaponIndex);
+        pendingMineCoroutine = StartCoroutine(PlaceHiddenMineAfterVFXRoutine(owner, targetPos, usedWeapon, weaponIndex, placeDelay));
+
+        Debug.Log($"[Server Mine] Queued hidden mine placement by {owner} at {targetPos}. Mine will arm after {placeDelay:0.00}s.");
+        return false;
+    }
+
+    private IEnumerator PlaceHiddenMineAfterVFXRoutine(PlayerRef owner, Vector2Int targetPos, WeaponData usedWeapon, int weaponIndex, float delaySeconds)
+    {
+        if (delaySeconds > 0f)
+            yield return new WaitForSeconds(delaySeconds);
+
+        pendingMineCoroutine = null;
+
+        if (!HasStateAuthority || ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
+        {
+            attackResolutionInProgress = false;
+            yield break;
+        }
+
+        if (ServerGameManager.Instance.currentGameState == NetGameState.GameOver ||
+            ServerGameManager.Instance.currentGameState == NetGameState.Init)
+        {
+            attackResolutionInProgress = false;
+            yield break;
+        }
+
+        if (!HasHiddenMineAt(targetPos))
+        {
+            hiddenMines.Add(new HiddenMineInstance
+            {
+                GridPos = targetPos,
+                Owner = owner,
+                WeaponIndex = weaponIndex,
+                Damage = ResolveHiddenMineDamage(usedWeapon),
+                AoERange = Mathf.Max(0, usedWeapon.hiddenMineAOERange)
+            });
+
+            Debug.Log($"[Server Mine] Hidden mine armed at {targetPos}. TotalMines={hiddenMines.Count}");
+        }
+
+        attackResolutionInProgress = false;
+
+        if (ServerGameManager.Instance.currentGameState == NetGameState.ResolvingAction)
+            ServerGameManager.Instance.CompleteManualResolve();
     }
 
     private IEnumerator ApplyAttackAfterVFXRoutine(Dictionary<Vector2Int, List<CombatEffect>> effectMap, WeaponData usedWeapon, int weaponIndex, float delaySeconds)
@@ -172,7 +271,7 @@ public class ServerCombatManager : NetworkBehaviour
             string weaponName = usedWeapon != null ? usedWeapon.weaponName : "UnknownWeapon";
             Debug.Log($"[Server Combat] Target at {pos} took {totalDamage} damage from weapon {weaponName} after VFX resolved. Piece damage/destroyed VFX spawned.");
 
-            if (killedKing)
+            if (killedKing || ServerGameManager.Instance == null || ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
                 break;
         }
 
@@ -187,7 +286,174 @@ public class ServerCombatManager : NetworkBehaviour
             pendingAttackCoroutine = null;
         }
 
+        if (pendingMineCoroutine != null)
+        {
+            StopCoroutine(pendingMineCoroutine);
+            pendingMineCoroutine = null;
+        }
+
         attackResolutionInProgress = false;
+    }
+
+    public void ClearHiddenMines()
+    {
+        hiddenMines.Clear();
+    }
+
+    public bool TryTriggerHiddenMineForMovedPiece(ChessFaction movedFaction, Vector2Int fromPos, Vector2Int toPos)
+    {
+        if (!HasStateAuthority) return false;
+        if (hiddenMines.Count == 0) return false;
+        if (ServerGameManager.Instance == null || ServerBoardManager.Instance == null) return false;
+        if (movedFaction != ChessFaction.ChessAlliance) return false;
+        if (attackResolutionInProgress) return false;
+
+        List<Vector2Int> path = BuildMovementPathIncludingDestination(fromPos, toPos);
+        int mineIndex = -1;
+        HiddenMineInstance mine = default;
+
+        for (int i = 0; i < hiddenMines.Count; i++)
+        {
+            HiddenMineInstance candidate = hiddenMines[i];
+            if (path.Contains(candidate.GridPos))
+            {
+                mineIndex = i;
+                mine = candidate;
+                break;
+            }
+        }
+
+        if (mineIndex < 0)
+            return false;
+
+        hiddenMines.RemoveAt(mineIndex);
+        attackResolutionInProgress = true;
+        ServerGameManager.Instance.BeginManualResolve(NetGameState.KingTurn);
+        pendingMineCoroutine = StartCoroutine(ResolveHiddenMineExplosionRoutine(mine, toPos));
+        return true;
+    }
+
+    private IEnumerator ResolveHiddenMineExplosionRoutine(HiddenMineInstance mine, Vector2Int movedPieceFinalPos)
+    {
+        WeaponData weapon = GetWeaponDataByIndex(mine.WeaponIndex);
+        Rpc_PlayHiddenMineExplosionVFX(mine.GridPos, mine.WeaponIndex);
+
+        float delay = Mathf.Max(0f, hiddenMineExplosionDamageDelaySeconds);
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+
+        pendingMineCoroutine = null;
+
+        if (!HasStateAuthority || ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
+        {
+            attackResolutionInProgress = false;
+            yield break;
+        }
+
+        List<Vector2Int> affected = GetHiddenMineAffectedTiles(mine.GridPos, mine.AoERange);
+        if (!affected.Contains(movedPieceFinalPos))
+            affected.Add(movedPieceFinalPos);
+
+        bool phaseEnded = false;
+        for (int i = 0; i < affected.Count; i++)
+        {
+            Vector2Int pos = affected[i];
+            NetworkChessPiece targetPiece = ServerBoardManager.Instance.GetPieceAt(pos);
+            if (targetPiece == null || targetPiece.faction != ChessFaction.ChessAlliance)
+                continue;
+
+            Rpc_PlayPieceDamageVFX(pos, mine.WeaponIndex);
+            ApplyDamage(targetPiece, mine.Damage);
+
+            if (ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
+            {
+                phaseEnded = true;
+                break;
+            }
+        }
+
+        attackResolutionInProgress = false;
+
+        if (!phaseEnded && ServerGameManager.Instance.currentGameState == NetGameState.ResolvingAction)
+            ServerGameManager.Instance.CompleteManualResolve();
+    }
+
+    private List<Vector2Int> GetHiddenMineAffectedTiles(Vector2Int center, int aoeRange)
+    {
+        List<Vector2Int> result = new List<Vector2Int>();
+        if (ServerBoardManager.Instance == null || ServerBoardManager.Instance.logicBoard == null)
+            return result;
+
+        int range = Mathf.Max(0, aoeRange);
+        for (int x = -range; x <= range; x++)
+        {
+            for (int y = -range; y <= range; y++)
+            {
+                Vector2Int pos = center + new Vector2Int(x, y);
+                if (ServerBoardManager.Instance.logicBoard.IsValidPosition(pos.x, pos.y))
+                    result.Add(pos);
+            }
+        }
+
+        return result;
+    }
+
+    private List<Vector2Int> BuildMovementPathIncludingDestination(Vector2Int fromPos, Vector2Int toPos)
+    {
+        List<Vector2Int> path = new List<Vector2Int>();
+        Vector2Int delta = toPos - fromPos;
+        int steps = Mathf.Max(Mathf.Abs(delta.x), Mathf.Abs(delta.y));
+        if (steps <= 0)
+        {
+            path.Add(toPos);
+            return path;
+        }
+
+        bool straightOrDiagonal = delta.x == 0 || delta.y == 0 || Mathf.Abs(delta.x) == Mathf.Abs(delta.y);
+        if (!straightOrDiagonal)
+        {
+            path.Add(toPos);
+            return path;
+        }
+
+        Vector2Int step = new Vector2Int(delta.x == 0 ? 0 : delta.x / Mathf.Abs(delta.x), delta.y == 0 ? 0 : delta.y / Mathf.Abs(delta.y));
+        Vector2Int current = fromPos;
+        for (int i = 0; i < steps; i++)
+        {
+            current += step;
+            path.Add(current);
+        }
+
+        return path;
+    }
+
+    private bool HasHiddenMineAt(Vector2Int pos)
+    {
+        for (int i = 0; i < hiddenMines.Count; i++)
+        {
+            if (hiddenMines[i].GridPos == pos)
+                return true;
+        }
+
+        return false;
+    }
+
+    private int ResolveHiddenMineDamage(WeaponData weapon)
+    {
+        if (weapon == null) return 1;
+        return Mathf.Max(1, weapon.hiddenMineDamage > 0 ? weapon.hiddenMineDamage : weapon.baseDamage);
+    }
+
+    private bool TryGetPlayerController(PlayerRef player, out PlayerNetworkController controller)
+    {
+        controller = null;
+
+        if (NetworkRunnerHandler.Active != null && NetworkRunnerHandler.Active.TryGetPlayerController(player, out controller) && controller != null)
+            return true;
+
+        NetworkObject playerObject = Runner != null ? Runner.GetPlayerObject(player) : null;
+        controller = playerObject != null ? playerObject.GetComponent<PlayerNetworkController>() : null;
+        return controller != null;
     }
 
     private float ResolveServerDamageDelaySeconds(
@@ -234,7 +500,10 @@ public class ServerCombatManager : NetworkBehaviour
 
         string weaponName = weapon.weaponName != null ? weapon.weaponName.ToLowerInvariant() : string.Empty;
 
-        if (weaponName.Contains("grenade") || weaponName.Contains("nade") || weaponName.Contains("bomb"))
+        if (weapon.specialType == WeaponSpecialType.HiddenMine)
+            return WeaponVFXProjectileMode.SingleToSelectedTarget;
+
+        if (weaponName.Contains("grenade") || weaponName.Contains("nade") || weaponName.Contains("bomb") || weaponName.Contains("mine"))
             return WeaponVFXProjectileMode.SingleToSelectedTarget;
 
         if (weaponName.Contains("shotgun") || weaponName.Contains("scatter") || weaponName.Contains("spray"))
@@ -338,7 +607,6 @@ public class ServerCombatManager : NetworkBehaviour
         );
     }
 
-
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void Rpc_PlayPieceDamageVFX(Vector2Int damagedPos, int weaponIndex)
     {
@@ -364,6 +632,36 @@ public class ServerCombatManager : NetworkBehaviour
         }
 
         vfxManager.PlayDestroyedEffect(usedWeapon, damagedPos, visualBoard);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void Rpc_PlayHiddenMineExplosionVFX(Vector2Int minePos, int weaponIndex)
+    {
+        if (Application.isBatchMode)
+            return;
+
+        WeaponData weapon = GetWeaponDataByIndex(weaponIndex);
+        ChessBoard visualBoard = FindFirstObjectByType<ChessBoard>();
+        if (visualBoard == null)
+            return;
+
+        BoardTile tile = visualBoard.GetTileAt(minePos);
+        if (tile == null)
+            return;
+
+        Vector3 spawnPos = tile.transform.position + visualBoard.PiecePlacementOffset + hiddenMineExplosionOffset;
+
+        if (weapon != null && weapon.hiddenMineExplosionPrefab != null)
+        {
+            Instantiate(weapon.hiddenMineExplosionPrefab, spawnPos, Quaternion.identity);
+        }
+        else if (CombatVFXManager.Instance != null)
+        {
+            CombatVFXManager.Instance.PlayDestroyedEffect(weapon, minePos, visualBoard);
+        }
+
+        if (weapon != null && weapon.hiddenMineExplosionSfx != null)
+            GameAudioManager.PlaySfx(weapon.hiddenMineExplosionSfx, spawnPos, weapon.sfxSpatialBlend);
     }
 
     private BoardData BuildLocalVFXBoard(ChessBoard visualBoard)
@@ -397,8 +695,11 @@ public class ServerCombatManager : NetworkBehaviour
 
         Vector2Int deathPos = targetPiece.currentGridPos;
         bool wasKing = targetPiece.isKing;
+        ChessFaction defeatedFaction = targetPiece.faction;
 
         ChessPieceRuntime runtime = ServerBoardManager.Instance.GetRuntimeAt(deathPos);
+        if (runtime != null)
+            defeatedFaction = runtime.faction;
 
         if (runtime != null && ServerGameManager.Instance != null)
         {
@@ -417,9 +718,18 @@ public class ServerCombatManager : NetworkBehaviour
             Runner.Despawn(targetPiece.Object);
         }
 
-        if (wasKing && ServerGameManager.Instance != null)
+        if (ServerGameManager.Instance != null)
         {
-            ServerGameManager.Instance.OnKingDefeated();
+            if (wasKing)
+            {
+                ServerGameManager.Instance.OnKingDefeated();
+            }
+            else if (defeatedFaction == ChessFaction.ChessAlliance &&
+                     !ServerBoardManager.Instance.HasAnyPieceOfFaction(ChessFaction.ChessAlliance))
+            {
+                Debug.Log("[Server Combat] All Chess Alliance pieces have been defeated. Rogue King wins the current phase.");
+                ServerGameManager.Instance.OnChessAllianceEliminated();
+            }
         }
 
         return wasKing;
@@ -428,6 +738,7 @@ public class ServerCombatManager : NetworkBehaviour
     public override void Despawned(NetworkRunner runner, bool hasState)
     {
         CancelPendingAttackResolution();
+        ClearHiddenMines();
 
         if (Instance == this)
             Instance = null;

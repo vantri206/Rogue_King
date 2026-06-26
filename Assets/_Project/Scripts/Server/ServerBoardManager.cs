@@ -148,6 +148,9 @@ public class ServerBoardManager : NetworkBehaviour
 
         boardState.Clear();
         logicBoard = null;
+
+        if (ServerCombatManager.Instance != null)
+            ServerCombatManager.Instance.ClearHiddenMines();
     }
 
     public bool IsValidMove(Vector2Int fromPos, Vector2Int toPos, PlayerRef requestingPlayer)
@@ -191,6 +194,11 @@ public class ServerBoardManager : NetworkBehaviour
         if (!boardState.TryGetValue(fromPos, out NetworkChessPiece piece) || piece == null)
             return false;
 
+        ChessFaction movedFaction = piece.faction;
+        ChessPieceRuntime movingRuntimeBeforeMove = logicBoard.GetEntityAt<ChessPieceRuntime>(fromPos.x, fromPos.y);
+        if (movingRuntimeBeforeMove != null)
+            movedFaction = movingRuntimeBeforeMove.faction;
+
         NetGameState stateBeforeMove = ServerGameManager.Instance != null
             ? ServerGameManager.Instance.currentGameState
             : NetGameState.Init;
@@ -210,10 +218,17 @@ public class ServerBoardManager : NetworkBehaviour
 
         piece.currentGridPos = toPos;
 
-        ChessPieceRuntime runtime = logicBoard.GetEntityAt<ChessPieceRuntime>(fromPos.x, fromPos.y);
+        ChessPieceRuntime runtime = movingRuntimeBeforeMove != null
+            ? movingRuntimeBeforeMove
+            : logicBoard.GetEntityAt<ChessPieceRuntime>(fromPos.x, fromPos.y);
+
         if (runtime != null)
-        {
             logicBoard.MoveEntity(runtime, toPos);
+
+        if (ServerCombatManager.Instance != null && ServerCombatManager.Instance.TryTriggerHiddenMineForMovedPiece(movedFaction, fromPos, toPos))
+        {
+            Debug.Log($"[ServerBoardManager] Move from {fromPos} to {toPos} triggered a hidden mine. Turn end is delayed until mine explosion resolves.");
+            return false;
         }
 
         return true;
@@ -223,6 +238,35 @@ public class ServerBoardManager : NetworkBehaviour
     {
         boardState.TryGetValue(pos, out NetworkChessPiece piece);
         return piece;
+    }
+
+    public bool HasAnyPieceOfFaction(ChessFaction faction)
+    {
+        if (!HasStateAuthority) return false;
+
+        foreach (var kvp in boardState)
+        {
+            NetworkChessPiece piece = kvp.Value;
+            if (piece != null && piece.faction == faction)
+                return true;
+        }
+
+        return false;
+    }
+
+    public int CountPiecesOfFaction(ChessFaction faction)
+    {
+        if (!HasStateAuthority) return 0;
+
+        int count = 0;
+        foreach (var kvp in boardState)
+        {
+            NetworkChessPiece piece = kvp.Value;
+            if (piece != null && piece.faction == faction)
+                count++;
+        }
+
+        return count;
     }
 
     public ChessPieceRuntime GetRuntimeAt(Vector2Int pos)

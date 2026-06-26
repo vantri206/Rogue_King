@@ -106,12 +106,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Projectile
   trajectory: 0
-  speed: 5
+  speed: 10
   arcHeight: 2
   spinWhileFlying: 0
   spinSpeed: 360
   explosionDelay: 0
   explosionPrefab: {fileID: 0}
+  launchSfx: {fileID: 0}
+  impactSfx: {fileID: 0}
+  sfxSpatialBlend: 0
 --- !u!114 &4098514195787681198
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -134,3 +137,7 @@ MonoBehaviour:
   isLooping: 1
   isDestroyed: 0
   lifeTime: 0
+  startSfx: {fileID: 0}
+  sfxSpatialBlend: 0
+  playSfxOnStart: 1
+  playSfxOnlyOnce: 1

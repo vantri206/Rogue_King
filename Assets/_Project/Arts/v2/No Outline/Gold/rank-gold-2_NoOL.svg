@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #fec92b;
+      }
+
+      .cls-2 {
+        fill: #476475;
+      }
+
+      .cls-3 {
+        fill: #fee854;
+      }
+
+      .cls-4 {
+        fill: #fc9504;
+      }
+
+      .cls-5 {
+        fill: #324652;
+      }
+
+      .cls-6 {
+        fill: #1a1a1a;
+        opacity: 0;
+      }
+    </style>
+  </defs>
+  <g id="Finals">
+    <g id="rank-gold-2_NoOL">
+      <rect class="cls-6" width="64" height="64"/>
+      <g>
+        <rect class="cls-5" x="20.69" y="20.69" width="22.63" height="22.63" rx="5" ry="5" transform="translate(32 -13.26) rotate(45)"/>
+        <rect class="cls-2" x="26.35" y="26.34" width="11.31" height="11.31" transform="translate(32 -13.26) rotate(45)"/>
+        <path class="cls-1" d="M33.42,29.59l5.61-5.61c.59-.59,.75-1.47,.41-2.23l-5.61-12.63c-.35-.79-1.09-1.19-1.83-1.19V30.17c.51,0,1.02-.2,1.41-.59Z"/>
+        <path class="cls-4" d="M33.42,34.41c-.39-.39-.9-.59-1.41-.59v22.25c.74,0,1.48-.4,1.83-1.19l5.61-12.63c.34-.76,.17-1.64-.41-2.23l-5.61-5.61Z"/>
+        <path class="cls-3" d="M30.17,9.11l-5.61,12.63c-.34,.76-.17,1.64,.41,2.23l5.61,5.61c.39,.39,.9,.59,1.41,.59V7.92c-.74,0-1.48,.4-1.83,1.19Z"/>
+        <path class="cls-1" d="M30.59,34.41l-5.61,5.61c-.59,.59-.75,1.47-.41,2.23l5.61,12.63c.35,.79,1.09,1.19,1.83,1.19v-22.25c-.51,0-1.02,.2-1.41,.59Z"/>
+      </g>
+    </g>
+  </g>
+</svg>

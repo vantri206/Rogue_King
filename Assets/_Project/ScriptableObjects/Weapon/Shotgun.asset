@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Shotgun
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: SHOTGUN
-  weaponIcon: {fileID: 1098179606456428539, guid: 51cbd3b436133f14aa34ed6723f7d569, type: 3}
+  weaponIcon: {fileID: -7253108163612337102, guid: b4a779b5114a8a44c8565ae408e7e8e6, type: 3}
   baseDamage: 1
   defaultEffectType: 0
   isDirectional: 1
@@ -42,6 +42,13 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+  cooldownTurns: 3
+  specialType: 0
+  hiddenMineRequireEmptyTarget: 1
+  hiddenMineDamage: 0
+  hiddenMineAoERange: 1
+  hiddenMineExplosionPrefab: {fileID: 0}
+  hiddenMineExplosionSfx: {fileID: 0}
   targetingPattern:
   - {x: 3, y: 0}
   - {x: 4, y: 0}
@@ -78,5 +85,16 @@ MonoBehaviour:
   - {x: 3, y: 4}
   gunPrefab: {fileID: 8650001892109445979, guid: 6e9c7b975db32944498d27a2bb268ff5, type: 3}
   projectilePrefab: {fileID: 2534988561544425164, guid: 393dce5b5c7f41349897bd11e084aefe, type: 3}
+  useSfx: {fileID: 0}
+  fireSfx: {fileID: 8300000, guid: bef5f611990902b4d9abbc9b96f52857, type: 3}
+  projectileLaunchSfx: {fileID: 0}
+  projectileImpactSfx: {fileID: 0}
+  damageEffectSfx: {fileID: 0}
+  sfxSpatialBlend: 0
   vfxProjectileMode: 3
+  overrideProjectileTargetOffset: 0
+  projectileTargetWorldOffset: {x: 0, y: 0.65, z: 0}
+  destroyedEffectPrefab: {fileID: 0}
+  overrideDestroyedEffectOffset: 0
+  destroyedEffectWorldOffset: {x: 0, y: 0.55, z: 0}
   serverDamageDelaySeconds: 0

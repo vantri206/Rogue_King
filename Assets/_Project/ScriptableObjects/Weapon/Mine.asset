@@ -1,0 +1,69 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 901d9a14a0b9c8c4c91298fd32a89331, type: 3}
+  m_Name: Mine
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponData
+  weaponName: MINE
+  weaponIcon: {fileID: 6701434673270998501, guid: 2291519ecf1c4bb4981e8f5178be708b, type: 3}
+  baseDamage: 1
+  defaultEffectType: 0
+  isDirectional: 1
+  isOriginRelative: 0
+  damageFalloff:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  cooldownTurns: 3
+  specialType: 1
+  hiddenMineRequireEmptyTarget: 1
+  hiddenMineDamage: 0
+  hiddenMineAOERange: 0
+  hiddenMineExplosionPrefab: {fileID: 6834287514670173504, guid: cfe435b9b7180d44cbb7bd63e9b0f163, type: 3}
+  hiddenMineExplosionSfx: {fileID: 8300000, guid: d5238ccbd74cd8343aafbe93fcf5f045, type: 3}
+  targetingPattern: []
+  effectPattern:
+  - {x: 0, y: 0}
+  gunPrefab: {fileID: 0}
+  projectilePrefab: {fileID: 2534988561544425164, guid: d43ee044735b2954ebc947ef5fbeb38c, type: 3}
+  useSfx: {fileID: 0}
+  fireSfx: {fileID: 8300000, guid: bef5f611990902b4d9abbc9b96f52857, type: 3}
+  projectileLaunchSfx: {fileID: 0}
+  projectileImpactSfx: {fileID: 0}
+  damageEffectSfx: {fileID: 8300000, guid: d5238ccbd74cd8343aafbe93fcf5f045, type: 3}
+  sfxSpatialBlend: 0
+  vfxProjectileMode: 1
+  overrideProjectileTargetOffset: 0
+  projectileTargetWorldOffset: {x: 0, y: 0.65, z: 0}
+  destroyedEffectPrefab: {fileID: 0}
+  overrideDestroyedEffectOffset: 0
+  destroyedEffectWorldOffset: {x: 0, y: 0.55, z: 0}
+  serverDamageDelaySeconds: 0

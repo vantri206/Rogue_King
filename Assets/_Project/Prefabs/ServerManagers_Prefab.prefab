@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 6269751544342321873}
   - component: {fileID: 6132496844577947427}
   - component: {fileID: -3966902962346141956}
+  - component: {fileID: 165451664351563356}
   m_Layer: 0
   m_Name: ServerManagers_Prefab
   m_TagString: Untagged
@@ -74,6 +75,20 @@ MonoBehaviour:
   _currentPhase: 0
   _phase1TurnCount: 0
   _phase2TurnCount: 0
+  enablePhaseTransitionDelay: 1
+  phaseTransitionDelaySeconds: 5
+  _phaseTransitionDurationNetworkSeconds: 0
+  _phaseTransitionPhaseNumber: 0
+  enableTurnTimer: 1
+  turnDurationSeconds: 30
+  _turnDurationNetworkSeconds: 0
+  _matchEndReason:
+    _length: 0
+    _data:
+      Data: 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  _matchResultSerial: 0
+  kickAllPlayersAfterGameOver: 1
+  kickAllPlayersAfterGameOverDelaySeconds: 5
   visualResolveTime: 1.5
 --- !u!114 &6269751544342321873
 MonoBehaviour:
@@ -107,10 +122,14 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 678351198be7c744da6d43ec0ab4f797, type: 2}
   - {fileID: 11400000, guid: de9d7caac4bf0414c99f774e555e9baf, type: 2}
   - {fileID: 11400000, guid: 1dec8110b38ec754fbb2b76b231046af, type: 2}
+  - {fileID: 11400000, guid: 0354e2566765f244886f194a6f16a6a4, type: 2}
   fallbackDamageDelaySeconds: 1
   grenadeAutoDamageDelaySeconds: 1.35
   shotgunAutoDamageDelaySeconds: 0.9
   maxAutoDamageDelaySeconds: 2
+  hiddenMinePlaceDelaySeconds: 0.75
+  hiddenMineExplosionDamageDelaySeconds: 0.45
+  hiddenMineExplosionOffset: {x: 0, y: 0.35, z: 0}
 --- !u!114 &-3966902962346141956
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -124,6 +143,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ServerCardManager
   availableCards:
-  - {fileID: 11400000, guid: 7665be157ae4db944ba6e2ccc4e454d3, type: 2}
-  - {fileID: 11400000, guid: 1471f4f678ed1234485c606ce871e724, type: 2}
-  - {fileID: 11400000, guid: 4a20f1bc3c854a446b9b6f0487885897, type: 2}
+  - {fileID: 11400000, guid: 4c4f88654b985944f97a9a0b8f7737d4, type: 2}
+--- !u!114 &165451664351563356
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1985735495231317440}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a13c2d9f85de40a88b23b8a26035dadc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ServerLeaderboardManager
+  leaderboardFileName: leaderboard.json
+  saveNextToBuildExe: 1
+  startingElo: 1000
+  simpleWinDelta: 16
+  minimumElo: 0
+  maxAvatarId: 3
+  defaultTopCount: 10
+  reloadJsonBeforeRead: 1
+  serverAssignsDefaultNames: 1
+  generatedNamePrefix: Player
