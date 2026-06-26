@@ -14,7 +14,8 @@ public class PlayerNetworkController : NetworkBehaviour
         DraggingPiece,
         AimingAttack,
         ConfirmingAttack,
-        Animating
+        Animating,
+        AimingCard 
     }
 
     [Header("Scene References")]
@@ -932,6 +933,14 @@ public class PlayerNetworkController : NetworkBehaviour
     {
         if (clickedTile == null) return;
 
+        if (currentState == ClientInputState.AimingCard)
+        {
+            Debug.Log($"🟨 [Client Input] Đã chỉ định ô {cellPos} cho thẻ '{pendingCardData?.cardName}'. Đang gửi RPC!");
+            Rpc_RequestPlayCard(pendingCardSlotIndex, cellPos);
+            CancelCurrentInteraction(); // Xài xong thì cất thẻ, quay về Idle
+            return;
+        }
+
         if (currentState == ClientInputState.Idle)
         {
             if (!CanLocalPlayerActNow())
@@ -1517,6 +1526,10 @@ public class PlayerNetworkController : NetworkBehaviour
         currentAoETiles.Clear();
         lockedAttackTarget = new Vector2Int(-1, -1);
         selectedPiece = null;
+
+        pendingCardSlotIndex = -1; 
+        pendingCardData = null;
+
         currentState = ClientInputState.Idle;
 
         if (weaponUI != null)
@@ -1771,6 +1784,8 @@ public class PlayerNetworkController : NetworkBehaviour
 
     [Header("Card System (Networked)")]
     [SerializeField] private List<CardData> startingDeck; // Kéo thả 1 lá test card vào đây nếu chỉ cần test UI/RPC.
+    private int pendingCardSlotIndex = -1;
+    private CardData pendingCardData = null;
 
     [Networked] public NetworkBool hasExtraTurn { get; set; }
     private bool deckInitializedOnServer;
@@ -1851,7 +1866,26 @@ public class PlayerNetworkController : NetworkBehaviour
             }
         }
     }
+    public void StartAimingCard(int slotIndex, CardData data)
+    {
+        // Tự động phân loại: Thẻ nào cần chọn mục tiêu?
+        if (data.effectType == CardEffectType.SuperBuff || data.effectType == CardEffectType.Recall)
+        {
+            pendingCardSlotIndex = slotIndex;
+            pendingCardData = data;
+            currentState = ClientInputState.AimingCard; // Chuyển sang trạng thái NGẮM
 
+            // Xóa các ô đang highlight trên bàn cờ
+            ClearAllHighlights();
+            Debug.Log($"🟨 [Client Input] Đang ngắm thẻ '{data.cardName}'. Hãy CLICK CHỌN 1 Ô TRÊN BÀN CỜ để sử dụng!");
+        }
+        else
+        {
+            // Thẻ toàn sân (Bứt Tốc, Hành Quân) -> Bắn thẳng lên Server, không cần ngắm
+            Debug.Log($"🟩 [Client Input] Thẻ '{data.cardName}' không cần mục tiêu. Kích hoạt ngay!");
+            Rpc_RequestPlayCard(slotIndex, new Vector2Int(-1, -1));
+        }
+    }
     private void OnHandCardsChanged()
     {
         // Khi Server cập nhật mảng bài (VD: vừa xài xong, vừa trừ Cooldown), báo cho giao diện Client Refresh

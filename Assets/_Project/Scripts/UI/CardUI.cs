@@ -5,6 +5,10 @@ using TMPro;
 public class CardUI : MonoBehaviour
 {
     public TextMeshProUGUI cardNameText;
+
+    // ---> THÊM BIẾN NÀY <---
+    public Image cardImage;
+
     public TextMeshProUGUI usesText;
     public TextMeshProUGUI cooldownText;
     public Image cooldownOverlay;
@@ -15,10 +19,22 @@ public class CardUI : MonoBehaviour
     public void SetupNetworked(NetworkCardInstance netCard, CardData data, int slotIndex, System.Action<int> onClickCallback)
     {
         mySlotIndex = slotIndex;
-        cardNameText.text = data.cardName;
+
+        if (cardNameText != null) cardNameText.text = data.cardName;
+
+        // ---> THÊM ĐOẠN NÀY ĐỂ ỐP HÌNH VÀO LÁ BÀI <---
+        if (cardImage != null && data.cardArtwork != null)
+        {
+            cardImage.sprite = data.cardArtwork;
+            cardImage.color = Color.white; // Reset màu chuẩn
+        }
 
         cardButton.onClick.RemoveAllListeners();
-        cardButton.onClick.AddListener(() => onClickCallback?.Invoke(mySlotIndex));
+        cardButton.onClick.AddListener(() =>
+        {
+            Debug.Log($"🟨 [CardUI] Đã Click vào thẻ: {data.cardName} (Khe số: {mySlotIndex})");
+            onClickCallback?.Invoke(mySlotIndex);
+        });
 
         UpdateUI(netCard, data);
     }
@@ -46,4 +62,6 @@ public class CardUI : MonoBehaviour
             cardButton.interactable = true;
         }
     }
+
+    public int GetSlotIndex() => mySlotIndex;
 }
