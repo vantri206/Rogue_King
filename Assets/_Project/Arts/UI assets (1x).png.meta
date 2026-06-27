@@ -3478,10 +3478,10 @@ TextureImporter:
       name: UI assets (1x)_37
       rect:
         serializedVersion: 2
-        x: 0
-        y: 917
-        width: 193
-        height: 6
+        x: 96
+        y: 918
+        width: 48
+        height: 2
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -13309,7 +13309,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_484
+      name: A
       rect:
         serializedVersion: 2
         x: 0
@@ -13353,7 +13353,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_486
+      name: C
       rect:
         serializedVersion: 2
         x: 32
@@ -13375,7 +13375,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_487
+      name: D
       rect:
         serializedVersion: 2
         x: 47
@@ -13397,7 +13397,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_488
+      name: E
       rect:
         serializedVersion: 2
         x: 63
@@ -13485,7 +13485,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_492
+      name: I
       rect:
         serializedVersion: 2
         x: 127
@@ -13595,7 +13595,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_497
+      name: N
       rect:
         serializedVersion: 2
         x: 207
@@ -13617,7 +13617,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_498
+      name: O
       rect:
         serializedVersion: 2
         x: 224
@@ -13639,7 +13639,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_499
+      name: P
       rect:
         serializedVersion: 2
         x: 239
@@ -13683,7 +13683,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_501
+      name: R
       rect:
         serializedVersion: 2
         x: 271
@@ -13727,7 +13727,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_503
+      name: T
       rect:
         serializedVersion: 2
         x: 303
@@ -13771,7 +13771,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_505
+      name: V
       rect:
         serializedVersion: 2
         x: 335
@@ -13837,7 +13837,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: UI assets (1x)_508
+      name: Y
       rect:
         serializedVersion: 2
         x: 383
@@ -21330,6 +21330,16 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
+      A: -5407826423348285351
+      C: 8955119095238915951
+      D: -1678975687809947597
+      E: 75238517762191380
+      I: 1799423880694550317
+      N: 6956350613598880909
+      O: -135333877571236540
+      P: 8310035078332876730
+      R: -4165510690165901104
+      T: 9004455453218872945
       UI assets (1x)_0: 3915857350320987111
       UI assets (1x)_1: -9065386729753361718
       UI assets (1x)_10: -5483129068010766392
@@ -21758,34 +21768,22 @@ TextureImporter:
       UI assets (1x)_481: -3494349179292527405
       UI assets (1x)_482: 8386169271341791651
       UI assets (1x)_483: 8384223453384256574
-      UI assets (1x)_484: -5407826423348285351
       UI assets (1x)_485: 2041305642711448992
-      UI assets (1x)_486: 8955119095238915951
-      UI assets (1x)_487: -1678975687809947597
-      UI assets (1x)_488: 75238517762191380
       UI assets (1x)_489: -4670768082685037245
       UI assets (1x)_49: -2516683038351606665
       UI assets (1x)_490: -552626128168638600
       UI assets (1x)_491: 3926757714266179859
-      UI assets (1x)_492: 1799423880694550317
       UI assets (1x)_493: 4827182971377687356
       UI assets (1x)_494: -4536609740334544433
       UI assets (1x)_495: -7378533031739161549
       UI assets (1x)_496: 8367341160855580721
-      UI assets (1x)_497: 6956350613598880909
-      UI assets (1x)_498: -135333877571236540
-      UI assets (1x)_499: 8310035078332876730
       UI assets (1x)_5: 4363016129704875981
       UI assets (1x)_50: 3828510677193521697
       UI assets (1x)_500: 3436799506777000260
-      UI assets (1x)_501: -4165510690165901104
       UI assets (1x)_502: -7499719397728491584
-      UI assets (1x)_503: 9004455453218872945
       UI assets (1x)_504: -4832209803255862805
-      UI assets (1x)_505: -746373417611517377
       UI assets (1x)_506: -4078685675406444705
       UI assets (1x)_507: -6684146821608593260
-      UI assets (1x)_508: 6702902021781180619
       UI assets (1x)_509: 9125121335188536917
       UI assets (1x)_51: 132020196707205508
       UI assets (1x)_510: -8337649028866747448
@@ -22178,6 +22176,8 @@ TextureImporter:
       UI assets (1x)_97: 3509887126406140130
       UI assets (1x)_98: -8274487456200971443
       UI assets (1x)_99: -1002923359564662942
+      V: -746373417611517377
+      Y: 6702902021781180619
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
