@@ -42,14 +42,62 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  cooldownTurns: 3
+  cooldownTurns: 6
   specialType: 1
   hiddenMineRequireEmptyTarget: 1
   hiddenMineDamage: 0
   hiddenMineAOERange: 0
   hiddenMineExplosionPrefab: {fileID: 6834287514670173504, guid: cfe435b9b7180d44cbb7bd63e9b0f163, type: 3}
   hiddenMineExplosionSfx: {fileID: 8300000, guid: d5238ccbd74cd8343aafbe93fcf5f045, type: 3}
-  targetingPattern: []
+  targetingPattern:
+  - {x: -1, y: 0}
+  - {x: -2, y: 0}
+  - {x: -2, y: -1}
+  - {x: -1, y: -1}
+  - {x: 0, y: -1}
+  - {x: 1, y: -1}
+  - {x: 2, y: -1}
+  - {x: -1, y: -2}
+  - {x: -2, y: -2}
+  - {x: 0, y: -2}
+  - {x: 1, y: -2}
+  - {x: 2, y: -2}
+  - {x: 2, y: 0}
+  - {x: 1, y: 0}
+  - {x: -1, y: 1}
+  - {x: -2, y: 1}
+  - {x: 0, y: 1}
+  - {x: 1, y: 1}
+  - {x: 2, y: 1}
+  - {x: -2, y: 2}
+  - {x: -1, y: 2}
+  - {x: 0, y: 2}
+  - {x: 1, y: 2}
+  - {x: 2, y: 2}
+  - {x: -3, y: 2}
+  - {x: -3, y: 1}
+  - {x: -3, y: 0}
+  - {x: -3, y: -1}
+  - {x: -3, y: -2}
+  - {x: -3, y: -3}
+  - {x: -2, y: -3}
+  - {x: -1, y: -3}
+  - {x: 0, y: -3}
+  - {x: 1, y: -3}
+  - {x: 2, y: -3}
+  - {x: 3, y: -3}
+  - {x: 3, y: -2}
+  - {x: 3, y: 0}
+  - {x: 3, y: -1}
+  - {x: 3, y: 1}
+  - {x: 3, y: 2}
+  - {x: 3, y: 3}
+  - {x: 2, y: 3}
+  - {x: 1, y: 3}
+  - {x: 0, y: 3}
+  - {x: -1, y: 3}
+  - {x: -2, y: 3}
+  - {x: -3, y: 3}
   effectPattern:
   - {x: 0, y: 0}
   gunPrefab: {fileID: 0}

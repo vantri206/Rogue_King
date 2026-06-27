@@ -359,6 +359,30 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return true;
     }
 
+    public bool ClientCancelLobbyMatchmaking()
+    {
+        pendingLobbyMatchRequest = false;
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomCode = null;
+
+        if (!currentRunIsLobby || runner == null || runner.IsServer)
+        {
+            Debug.LogWarning("[Lobby] Cancel ignored locally because this client is not connected to the lobby session.");
+            return false;
+        }
+
+        PlayerNetworkController controller = GetLocalPlayerController();
+        if (controller == null)
+        {
+            Debug.LogWarning("[Lobby] Cancel request stored locally only because PlayerNetworkController is not ready.");
+            return true;
+        }
+
+        controller.ClientCancelLobbyRequestFromLobby();
+        return true;
+    }
+
     public bool ClientRequestLeaderboardRefresh()
     {
         if (runner == null || runner.IsServer || !currentRunIsLobby)
@@ -501,6 +525,8 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         pendingLobbyCreateRoomRequest = false;
         pendingLobbyJoinRoomRequest = false;
         pendingLobbyJoinRoomCode = null;
+
+        ClientCancelLobbyMatchmaking();
 
         MatchmakingMenuUI menu = FindFirstObjectByType<MatchmakingMenuUI>(FindObjectsInactive.Include);
         if (menu != null)
@@ -1428,6 +1454,37 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         string sessionName = string.IsNullOrWhiteSpace(lobbyMatchSessionName) ? defaultSessionName : lobbyMatchSessionName.Trim();
         Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} joined room code {roomCode}. Sending joiner to match session '{sessionName}'.");
         SendLobbyMatchFound(player, sessionName, roomCode);
+        return true;
+    }
+
+    public bool ServerPlayerCancelledLobbyRequest(PlayerRef player)
+    {
+        if (runner == null || !runner.IsServer || !currentRunIsLobby)
+            return false;
+
+        bool changed = false;
+
+        if (lobbyReadyPlayers.Remove(player))
+            changed = true;
+
+        if (lobbyCustomRooms.Count > 0)
+        {
+            List<string> ownedRoomCodes = new List<string>();
+            foreach (var kvp in lobbyCustomRooms)
+            {
+                if (kvp.Value != null && kvp.Value.Owner == player)
+                    ownedRoomCodes.Add(kvp.Key);
+            }
+
+            for (int i = 0; i < ownedRoomCodes.Count; i++)
+            {
+                lobbyCustomRooms.Remove(ownedRoomCodes[i]);
+                changed = true;
+                Debug.Log($"[Lobby CustomRoom] Removed cancelled room code {ownedRoomCodes[i]} owned by Player {player.PlayerId}.");
+            }
+        }
+
+        Debug.Log($"[Lobby] Player {player.PlayerId} cancelled lobby matchmaking/custom-room request. Changed={changed}. Ready={lobbyReadyPlayers.Count}, CustomRooms={lobbyCustomRooms.Count}");
         return true;
     }
 

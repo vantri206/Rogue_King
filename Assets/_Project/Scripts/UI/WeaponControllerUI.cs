@@ -32,19 +32,28 @@ public class WeaponControllerUI : MonoBehaviour
     [SerializeField] private Button actionButton;
     [SerializeField] private TextMeshProUGUI actionButtonText;
 
+    [Header("Cancel Attack Button")]
+    [Tooltip("Button nằm cạnh Attack/FIRE trong Weapon UI. Dùng để hủy trạng thái đang aim/chọn target tấn công.")]
+    [SerializeField] private Button cancelActionButton;
+
+    [SerializeField] private TextMeshProUGUI cancelActionButtonText;
+
     [Header("Weapon Slots")]
     [SerializeField] private WeaponSlotUI[] weaponSlots;
 
     public Action onActionPressed;
     public Action<int> onWeaponSelected;
+    public Action onCancelPressed;
 
     private bool unityButtonEventsBound;
     private UnityAction actionButtonHandler;
+    private UnityAction cancelButtonHandler;
     private UnityAction[] weaponSlotHandlers;
 
     private readonly List<int> currentCooldowns = new List<int>();
     private bool[] slotHasWeapon;
     private bool isConfirmingAction;
+    private bool cancelActionVisible;
 
     private void Awake()
     {
@@ -56,6 +65,7 @@ public class WeaponControllerUI : MonoBehaviour
         UnbindUnityButtonEvents();
         onActionPressed = null;
         onWeaponSelected = null;
+        onCancelPressed = null;
     }
 
     private void BindUnityButtonEventsOnce()
@@ -68,6 +78,14 @@ public class WeaponControllerUI : MonoBehaviour
             actionButtonHandler = HandleActionButtonClicked;
             actionButton.onClick.RemoveListener(actionButtonHandler);
             actionButton.onClick.AddListener(actionButtonHandler);
+        }
+
+        if (cancelActionButton != null)
+        {
+            cancelButtonHandler = HandleCancelButtonClicked;
+            cancelActionButton.onClick.RemoveListener(cancelButtonHandler);
+            cancelActionButton.onClick.AddListener(cancelButtonHandler);
+            SetCancelActionVisible(false);
         }
 
         if (weaponSlots != null)
@@ -100,6 +118,9 @@ public class WeaponControllerUI : MonoBehaviour
         if (actionButton != null && actionButtonHandler != null)
             actionButton.onClick.RemoveListener(actionButtonHandler);
 
+        if (cancelActionButton != null && cancelButtonHandler != null)
+            cancelActionButton.onClick.RemoveListener(cancelButtonHandler);
+
         if (weaponSlots != null && weaponSlotHandlers != null)
         {
             for (int i = 0; i < weaponSlots.Length && i < weaponSlotHandlers.Length; i++)
@@ -119,6 +140,11 @@ public class WeaponControllerUI : MonoBehaviour
         onActionPressed?.Invoke();
     }
 
+    private void HandleCancelButtonClicked()
+    {
+        onCancelPressed?.Invoke();
+    }
+
     private void HandleWeaponSlotClicked(int index)
     {
         onWeaponSelected?.Invoke(index);
@@ -127,6 +153,9 @@ public class WeaponControllerUI : MonoBehaviour
     public void TogglePanel(bool active)
     {
         if (weaponHUD != null) weaponHUD.SetActive(active);
+
+        if (!active)
+            SetCancelActionVisible(false);
     }
 
     public void SetupWeaponSlots(IReadOnlyList<WeaponData> weapons)
@@ -199,6 +228,20 @@ public class WeaponControllerUI : MonoBehaviour
             actionButtonText.text = isConfirming ? "FIRE!" : "ATK";
 
         RefreshCooldownVisuals();
+    }
+
+    public void SetCancelActionVisible(bool visible)
+    {
+        cancelActionVisible = visible;
+
+        if (cancelActionButtonText != null)
+            cancelActionButtonText.text = "Cancel";
+
+        if (cancelActionButton != null)
+        {
+            cancelActionButton.gameObject.SetActive(visible);
+            cancelActionButton.interactable = visible;
+        }
     }
 
     public void SetWeaponCooldowns(IReadOnlyList<int> cooldowns)

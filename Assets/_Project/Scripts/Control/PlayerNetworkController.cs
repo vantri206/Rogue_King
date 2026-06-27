@@ -139,7 +139,6 @@ public class PlayerNetworkController : NetworkBehaviour
         TrySubmitLocalCardLoadoutToServer();
         ResolveSceneReferences();
         InitializeWeaponUIIfPossible();
-
         if (ghostPiece != null)
             ghostPiece.Hide();
 
@@ -163,6 +162,7 @@ public class PlayerNetworkController : NetworkBehaviour
         ReleaseLocalInput();
         UnsubscribeWeaponUI();
     }
+
 
     private bool TryAcquireLocalInput()
     {
@@ -355,6 +355,14 @@ public class PlayerNetworkController : NetworkBehaviour
         Rpc_RequestJoinCustomRoomFromLobby(safeCode);
     }
 
+    public void ClientCancelLobbyRequestFromLobby()
+    {
+        if (!HasInputAuthority)
+            return;
+
+        Rpc_CancelLobbyRequest();
+    }
+
     public void ClientRequestLeaderboardRefresh()
     {
         if (!HasInputAuthority)
@@ -391,6 +399,16 @@ public class PlayerNetworkController : NetworkBehaviour
 
         if (NetworkRunnerHandler.Active != null)
             NetworkRunnerHandler.Active.ServerPlayerRequestedJoinCustomRoom(info.Source, roomCode.ToString());
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_CancelLobbyRequest(RpcInfo info = default)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (NetworkRunnerHandler.Active != null)
+            NetworkRunnerHandler.Active.ServerPlayerCancelledLobbyRequest(info.Source);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -727,9 +745,11 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             weaponUI.onActionPressed -= OnRogueActionPressed;
             weaponUI.onWeaponSelected -= OnRogueWeaponSelected;
+            weaponUI.onCancelPressed -= OnRogueCancelPressed;
 
             weaponUI.onActionPressed += OnRogueActionPressed;
             weaponUI.onWeaponSelected += OnRogueWeaponSelected;
+            weaponUI.onCancelPressed += OnRogueCancelPressed;
 
             weaponUISubscribed = true;
         }
@@ -741,6 +761,7 @@ public class PlayerNetworkController : NetworkBehaviour
             weaponUI.SetupWeaponSlots(equippedWeapons);
             weaponUI.UpdateActiveWeaponHighlight(currentSelectedWeaponIndex);
             weaponUI.SetActionMode(currentState == ClientInputState.ConfirmingAttack);
+            weaponUI.SetCancelActionVisible(IsAttackAimingState());
             RefreshWeaponCooldownUI();
 
             weaponSlotsConfigured = true;
@@ -786,6 +807,7 @@ public class PlayerNetworkController : NetworkBehaviour
 
         weaponUI.onActionPressed -= OnRogueActionPressed;
         weaponUI.onWeaponSelected -= OnRogueWeaponSelected;
+        weaponUI.onCancelPressed -= OnRogueCancelPressed;
         weaponUISubscribed = false;
     }
 
@@ -881,6 +903,7 @@ public class PlayerNetworkController : NetworkBehaviour
 
         weaponUI.TogglePanel(shouldShow);
         weaponUI.SetActionMode(currentState == ClientInputState.ConfirmingAttack);
+        weaponUI.SetCancelActionVisible(shouldShow && IsAttackAimingState());
         lastWeaponPanelState = shouldShow;
     }
 
@@ -1335,6 +1358,19 @@ public class PlayerNetworkController : NetworkBehaviour
         currentState = ClientInputState.Idle;
     }
 
+    private void OnRogueCancelPressed()
+    {
+        if (!IsLocalInputActive()) return;
+
+        if (currentState == ClientInputState.AimingAttack || currentState == ClientInputState.ConfirmingAttack)
+        {
+            if (debugInputLogs)
+                Debug.Log("[Client Input] Cancel attack pressed from WeaponControllerUI.");
+
+            CancelCurrentInteraction();
+        }
+    }
+
     private void OnRogueActionPressed()
     {
         if (!IsLocalInputActive()) return;
@@ -1467,7 +1503,10 @@ public class PlayerNetworkController : NetworkBehaviour
         currentState = ClientInputState.AimingAttack;
 
         if (weaponUI != null)
+        {
             weaponUI.SetActionMode(false);
+            weaponUI.SetCancelActionVisible(true);
+        }
 
         Debug.Log($"[Client Input] Entered attack aiming. Weapon={activeWeapon.weaponName}, Targets={currentValidAttacks.Count}");
     }
@@ -1485,7 +1524,10 @@ public class PlayerNetworkController : NetworkBehaviour
         UpdateAttackPreviewVisuals();
 
         if (weaponUI != null)
+        {
             weaponUI.SetActionMode(true);
+            weaponUI.SetCancelActionVisible(true);
+        }
 
         Debug.Log($"[Client Input] Attack target locked at {lockedAttackTarget}. Press FIRE to confirm.");
     }
@@ -1608,7 +1650,15 @@ public class PlayerNetworkController : NetworkBehaviour
         currentState = ClientInputState.Idle;
 
         if (weaponUI != null)
+        {
             weaponUI.SetActionMode(false);
+            weaponUI.SetCancelActionVisible(false);
+        }
+    }
+
+    private bool IsAttackAimingState()
+    {
+        return currentState == ClientInputState.AimingAttack || currentState == ClientInputState.ConfirmingAttack;
     }
 
     private bool CanLocalPlayerActNow()
@@ -2346,9 +2396,15 @@ public class PlayerNetworkController : NetworkBehaviour
         if (myFaction == ChessFaction.Neutral)
             return result;
 
-        if (data.effectType == CardEffectType.SummonCapturedPawn)
+        if (data.effectType == CardEffectType.SummonCapturedPawn || data.effectType == CardEffectType.KingRevive)
         {
             AddAllEmptyBoardTiles(result);
+            return result;
+        }
+
+        if (data.effectType == CardEffectType.KingDash)
+        {
+            AddKingDashTargetTiles(result, myFaction, Mathf.Max(1, data.effectValue1 <= 0 ? 3 : data.effectValue1));
             return result;
         }
 
@@ -2394,6 +2450,49 @@ public class PlayerNetworkController : NetworkBehaviour
         }
 
         return result;
+    }
+
+    private void AddKingDashTargetTiles(List<Vector2Int> result, ChessFaction myFaction, int range)
+    {
+        if (result == null || chessBoard == null)
+            return;
+
+        NetworkChessPiece kingPiece = FindRogueKingPiece();
+        if (kingPiece == null || !TryGetNetworkPieceSnapshot(kingPiece, out NetworkPieceSnapshot kingSnapshot))
+            return;
+
+        if (kingSnapshot.Faction != myFaction)
+            return;
+
+        BoardData previewBoard = BuildClientPreviewBoard(out _);
+        if (previewBoard == null)
+            return;
+
+        Vector2Int[] directions = new Vector2Int[]
+        {
+            Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right,
+            new Vector2Int(1, 1), new Vector2Int(1, -1), new Vector2Int(-1, 1), new Vector2Int(-1, -1)
+        };
+
+        Vector2Int start = kingSnapshot.GridPos;
+        range = Mathf.Max(1, range);
+
+        for (int dirIndex = 0; dirIndex < directions.Length; dirIndex++)
+        {
+            Vector2Int dir = directions[dirIndex];
+            for (int step = 1; step <= range; step++)
+            {
+                Vector2Int pos = start + dir * step;
+                if (!previewBoard.IsValidPosition(pos.x, pos.y))
+                    break;
+
+                if (!previewBoard.IsTileEmptyForMovement(pos.x, pos.y))
+                    break;
+
+                if (!result.Contains(pos))
+                    result.Add(pos);
+            }
+        }
     }
 
     private void FlashInstantCardAffectedTiles(CardData data)
@@ -2537,6 +2636,7 @@ public class PlayerNetworkController : NetworkBehaviour
             case CardEffectType.SuperBuff:
             case CardEffectType.Recall:
             case CardEffectType.SummonCapturedPawn:
+            case CardEffectType.KingRevive:
             case CardEffectType.PawnShield:
             case CardEffectType.KingDash:
             case CardEffectType.KingSweep:

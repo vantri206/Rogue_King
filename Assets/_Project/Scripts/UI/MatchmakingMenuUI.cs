@@ -10,6 +10,7 @@ public class MatchmakingMenuUI : MonoBehaviour
     [SerializeField] private NetworkRunnerHandler runnerHandler;
     [SerializeField] private Button playButton;
     [SerializeField] private Button createRoomButton;
+    [SerializeField] private Button cancelMatchmakingButton;
     [SerializeField] private TMP_InputField roomCodeInput;
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private GameObject rootToHideOnServer;
@@ -67,6 +68,13 @@ public class MatchmakingMenuUI : MonoBehaviour
             createRoomButton.onClick.RemoveListener(OnCreateRoomButtonClicked);
             createRoomButton.onClick.AddListener(OnCreateRoomButtonClicked);
         }
+
+        if (cancelMatchmakingButton != null)
+        {
+            cancelMatchmakingButton.onClick.RemoveListener(OnCancelMatchmakingButtonClicked);
+            cancelMatchmakingButton.onClick.AddListener(OnCancelMatchmakingButtonClicked);
+            cancelMatchmakingButton.interactable = false;
+        }
     }
 
     private async void Start()
@@ -111,6 +119,9 @@ public class MatchmakingMenuUI : MonoBehaviour
         if (createRoomButton != null)
             createRoomButton.onClick.RemoveListener(OnCreateRoomButtonClicked);
 
+        if (cancelMatchmakingButton != null)
+            cancelMatchmakingButton.onClick.RemoveListener(OnCancelMatchmakingButtonClicked);
+
         if (lobbyWaitTimeoutCoroutine != null)
         {
             StopCoroutine(lobbyWaitTimeoutCoroutine);
@@ -137,6 +148,29 @@ public class MatchmakingMenuUI : MonoBehaviour
             PlayQuickMatch();
         else
             JoinRoomByCode();
+    }
+
+
+    private void OnCancelMatchmakingButtonClicked()
+    {
+        CancelLobbySearchFromMenu("Đã hủy tìm trận.");
+    }
+
+    public void CancelLobbySearchFromMenu(string statusMessage = "Đã hủy tìm trận.")
+    {
+        if (lobbyWaitTimeoutCoroutine != null)
+        {
+            StopCoroutine(lobbyWaitTimeoutCoroutine);
+            lobbyWaitTimeoutCoroutine = null;
+        }
+
+        ResolveRunnerHandler();
+        if (runnerHandler != null)
+            runnerHandler.ClientCancelLobbyMatchmaking();
+
+        isMatchmaking = false;
+        SetInteractable(true);
+        SetStatus(string.IsNullOrWhiteSpace(statusMessage) ? "Đã hủy tìm trận." : statusMessage);
     }
 
     private void OnCreateRoomButtonClicked()
@@ -493,6 +527,12 @@ public class MatchmakingMenuUI : MonoBehaviour
 
         if (createRoomButton != null)
             createRoomButton.interactable = interactable;
+
+        if (roomCodeInput != null)
+            roomCodeInput.interactable = interactable;
+
+        if (cancelMatchmakingButton != null)
+            cancelMatchmakingButton.interactable = !interactable;
     }
 
     private string GetSanitizedRoomCodeInput()

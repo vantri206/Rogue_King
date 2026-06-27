@@ -132,7 +132,7 @@ public class ServerCardManager : NetworkBehaviour
                 break;
 
             case CardEffectType.KingRevive:
-                isSuccess = TryApplyKingRevive(data, myFaction);
+                isSuccess = TryApplyKingRevive(data, myFaction, targetPos);
                 break;
 
             case CardEffectType.KingSweep:
@@ -140,7 +140,7 @@ public class ServerCardManager : NetworkBehaviour
                 break;
 
             case CardEffectType.KingDash:
-                isSuccess = TryApplyKingDash(data, myFaction, targetRuntime);
+                isSuccess = TryApplyKingDash(data, myFaction, targetRuntime, targetPos);
                 break;
 
             case CardEffectType.SuperBuff:
@@ -234,34 +234,55 @@ public class ServerCardManager : NetworkBehaviour
         return true;
     }
 
-    private bool TryApplyKingRevive(CardData data, ChessFaction myFaction)
+    private bool TryApplyKingRevive(CardData data, ChessFaction myFaction, Vector2Int targetPos)
     {
         if (ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
+            return false;
+
+        if (targetPos.x < 0 || targetPos.y < 0)
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires an empty board target for revive.");
+            return false;
+        }
+
+        if (ServerBoardManager.Instance.logicBoard == null || !ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y))
+            return false;
+
+        if (!ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
             return false;
 
         List<DeadPieceRecord> graveyard = ServerGameManager.Instance.graveyard;
         if (graveyard == null || graveyard.Count == 0)
             return false;
 
-        for (int i = graveyard.Count - 1; i >= 0; i--)
+        List<int> candidates = new List<int>();
+        for (int i = 0; i < graveyard.Count; i++)
         {
             DeadPieceRecord record = graveyard[i];
-            if (record == null || record.faction != myFaction || record.pieceData == null)
+            if (record == null || record.pieceData == null)
                 continue;
 
-            Vector2Int pos = record.deathPos;
-            if (ServerBoardManager.Instance.logicBoard == null || !ServerBoardManager.Instance.logicBoard.IsValidPosition(pos.x, pos.y))
-                continue;
+            // KingRevive hồi sinh ngẫu nhiên 1 quân đã chết thuộc phe hiện tại của người dùng card.
+            if (record.faction == myFaction)
+                candidates.Add(i);
+        }
 
-            if (!ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(pos.x, pos.y) || ServerBoardManager.Instance.GetPieceAt(pos) != null)
-                continue;
+        if (candidates.Count == 0)
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' failed: no friendly dead piece in graveyard for faction={myFaction}.");
+            return false;
+        }
 
-            bool spawned = ServerBoardManager.Instance.TrySpawnRuntimePiece(record.pieceData, pos, record.faction);
-            if (spawned)
-            {
-                graveyard.RemoveAt(i);
-                return true;
-            }
+        int selectedListIndex = UnityEngine.Random.Range(0, candidates.Count);
+        int graveyardIndex = candidates[selectedListIndex];
+        DeadPieceRecord selected = graveyard[graveyardIndex];
+
+        bool spawned = ServerBoardManager.Instance.TrySpawnRuntimePiece(selected.pieceData, targetPos, selected.faction);
+        if (spawned)
+        {
+            graveyard.RemoveAt(graveyardIndex);
+            Debug.Log($"[Server Card] KingRevive revived random piece '{selected.pieceData.pieceName}' as {selected.faction} at chosen tile {targetPos}.");
+            return true;
         }
 
         return false;
@@ -279,16 +300,68 @@ public class ServerCardManager : NetworkBehaviour
         return true;
     }
 
-    private bool TryApplyKingDash(CardData data, ChessFaction myFaction, ChessPieceRuntime targetRuntime)
+    private bool TryApplyKingDash(CardData data, ChessFaction myFaction, ChessPieceRuntime ignoredTargetRuntime, Vector2Int targetPos)
     {
-        if (targetRuntime == null || targetRuntime.faction != myFaction || targetRuntime.baseData == null)
+        if (ServerBoardManager.Instance == null || ServerBoardManager.Instance.logicBoard == null)
             return false;
 
-        if (!targetRuntime.baseData.pieceName.Contains("King"))
+        ChessPieceRuntime kingRuntime = FindKingRuntime(myFaction);
+        if (kingRuntime == null || kingRuntime.baseData == null || !kingRuntime.baseData.pieceName.Contains("King"))
             return false;
 
-        targetRuntime.currentMoveRange += Mathf.Max(1, data.effectValue1 <= 0 ? 3 : data.effectValue1);
-        targetRuntime.isSuperBuffed = true;
+        Vector2Int fromPos = kingRuntime.currentGridPosition;
+        int range = Mathf.Max(1, data.effectValue1 <= 0 ? 3 : data.effectValue1);
+
+        if (!IsValidKingDashTarget(fromPos, targetPos, range))
+        {
+            Debug.LogWarning($"[Server Card] KingDash rejected. From={fromPos}, Target={targetPos}, Range={range}.");
+            return false;
+        }
+
+        bool shouldEndTurn = ServerBoardManager.Instance.MovePiece(fromPos, targetPos);
+        kingRuntime.isSuperBuffed = true;
+        Debug.Log($"[Server Card] KingDash moved King from {fromPos} to {targetPos}. Range={range}, ShouldEndTurnFromMove={shouldEndTurn}.");
+        return true;
+    }
+
+    private bool IsValidKingDashTarget(Vector2Int fromPos, Vector2Int targetPos, int range)
+    {
+        if (ServerBoardManager.Instance == null || ServerBoardManager.Instance.logicBoard == null)
+            return false;
+
+        BoardData board = ServerBoardManager.Instance.logicBoard;
+        if (!board.IsValidPosition(targetPos.x, targetPos.y))
+            return false;
+
+        if (!board.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
+            return false;
+
+        Vector2Int delta = targetPos - fromPos;
+        if (delta == Vector2Int.zero)
+            return false;
+
+        int absX = Mathf.Abs(delta.x);
+        int absY = Mathf.Abs(delta.y);
+        bool straight = delta.x == 0 || delta.y == 0;
+        bool diagonal = absX == absY;
+        if (!straight && !diagonal)
+            return false;
+
+        int distance = Mathf.Max(absX, absY);
+        if (distance < 1 || distance > Mathf.Max(1, range))
+            return false;
+
+        Vector2Int dir = new Vector2Int(delta.x == 0 ? 0 : delta.x / absX, delta.y == 0 ? 0 : delta.y / absY);
+        for (int step = 1; step <= distance; step++)
+        {
+            Vector2Int pos = fromPos + dir * step;
+            if (!board.IsValidPosition(pos.x, pos.y))
+                return false;
+
+            if (!board.IsTileEmptyForMovement(pos.x, pos.y) || ServerBoardManager.Instance.GetPieceAt(pos) != null)
+                return false;
+        }
+
         return true;
     }
 
@@ -384,6 +457,7 @@ public class ServerCardManager : NetworkBehaviour
             case CardEffectType.SuperBuff:
             case CardEffectType.Recall:
             case CardEffectType.SummonCapturedPawn:
+            case CardEffectType.KingRevive:
             case CardEffectType.PawnShield:
             case CardEffectType.KingDash:
             case CardEffectType.KingSweep:
@@ -398,7 +472,7 @@ public class ServerCardManager : NetworkBehaviour
         if (data == null)
             return false;
 
-        if (data.effectType == CardEffectType.SummonCapturedPawn)
+        if (data.effectType == CardEffectType.SummonCapturedPawn || data.effectType == CardEffectType.KingRevive)
         {
             if (targetPos.x < 0 || targetPos.y < 0)
                 return false;
@@ -421,6 +495,13 @@ public class ServerCardManager : NetworkBehaviour
 
         if (ServerBoardManager.Instance == null)
             return false;
+
+        if (data.effectType == CardEffectType.KingDash)
+        {
+            ChessPieceRuntime kingRuntime = FindKingRuntime(myFaction);
+            int range = Mathf.Max(1, data.effectValue1 <= 0 ? 3 : data.effectValue1);
+            return kingRuntime != null && IsValidKingDashTarget(kingRuntime.currentGridPosition, targetPos, range);
+        }
 
         ChessPieceRuntime targetRuntime = ServerBoardManager.Instance.GetRuntimeAt(targetPos);
         if (targetRuntime == null || targetRuntime.baseData == null)
