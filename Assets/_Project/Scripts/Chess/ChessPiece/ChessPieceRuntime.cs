@@ -23,6 +23,7 @@ public class ChessPieceRuntime : GridEntity
     public Vector2Int previousGridPosition; 
     public bool canAttackStraight;          
     public bool isSuperBuffed;
+    public bool hasMoved;
 
     public ChessPieceRuntime(ChessPieceData data, Vector2Int startPos, ChessFaction assignedFaction)
         : base(startPos, assignedFaction)
@@ -45,6 +46,7 @@ public class ChessPieceRuntime : GridEntity
         previousGridPosition = startPos;
         canAttackStraight = false;
         isSuperBuffed = false;
+        hasMoved = false;
     }
 
     public override bool IsBlockingMovement() => true;

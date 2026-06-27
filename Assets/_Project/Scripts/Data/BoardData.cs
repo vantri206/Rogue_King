@@ -93,50 +93,106 @@ public class BoardData
 
         Vector2Int currentPos = pieceRuntime.currentGridPosition;
 
-        // ---> TẠO DANH SÁCH HƯỚNG ĐI LINH HOẠT
-        List<Vector2Int> directionsToCheck = new List<Vector2Int>(pieceRuntime.currentMoveDirections);
 
-        // NẾU CÓ HIỆU ỨNG TỐT ĂN THẲNG: Bổ sung 4 hướng thẳng kịch kim (Trực diện biên)
-        if (pieceRuntime.baseData.pieceName.Contains("Pawn") && pieceRuntime.canAttackStraight)
+        if (pieceRuntime.baseData.pieceName.Contains("Pawn"))
         {
-            if (!directionsToCheck.Contains(Vector2Int.up)) directionsToCheck.Add(Vector2Int.up);
-            if (!directionsToCheck.Contains(Vector2Int.down)) directionsToCheck.Add(Vector2Int.down);
-            if (!directionsToCheck.Contains(Vector2Int.left)) directionsToCheck.Add(Vector2Int.left);
-            if (!directionsToCheck.Contains(Vector2Int.right)) directionsToCheck.Add(Vector2Int.right);
-        }
+            int forwardDir = (pieceRuntime.faction == ChessFaction.ChessAlliance) ? -1 : 1;
 
-        // Đổi vòng lặp gốc từ pieceRuntime.currentMoveDirections sang directionsToCheck
-        foreach (Vector2Int dir in directionsToCheck)
-        {
             for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
             {
-                Vector2Int checkPos = currentPos + (dir * i);
+                Vector2Int forwardMove = new Vector2Int(currentPos.x, currentPos.y + (forwardDir * i));
 
-                if (!IsValidPosition(checkPos.x, checkPos.y))
-                    break;
+                if (!IsValidPosition(forwardMove.x, forwardMove.y)) break;
 
-                ChessPieceRuntime targetPiece = GetEntityAt<ChessPieceRuntime>(checkPos.x, checkPos.y);
-
-                if (targetPiece != null)
+                if (IsTileEmptyForMovement(forwardMove.x, forwardMove.y))
                 {
-                    if (targetPiece.faction != pieceRuntime.faction)
-                    {
-                        validMoves.Add(checkPos);
-                    }
-
-                    if (pieceRuntime.currentMoveType == MovementType.Slide)
-                        break;
-                }
-                else if (IsTileEmptyForMovement(checkPos.x, checkPos.y))
-                {
-                    validMoves.Add(checkPos);
+                    validMoves.Add(forwardMove);
                 }
                 else
                 {
-                    break;
+                    if (i == 1 && pieceRuntime.canAttackStraight)
+                    {
+                        var targetStraight = GetEntityAt<ChessPieceRuntime>(forwardMove.x, forwardMove.y);
+                        if (targetStraight != null && targetStraight.faction != pieceRuntime.faction)
+                        {
+                            validMoves.Add(forwardMove); 
+                        }
+                    }
+                    break; 
+                }
+            }
+
+            if (!pieceRuntime.hasMoved)
+            {
+                Vector2Int forward1 = new Vector2Int(currentPos.x, currentPos.y + forwardDir);
+                Vector2Int forward2 = new Vector2Int(currentPos.x, currentPos.y + (forwardDir * 2));
+
+                if (IsValidPosition(forward1.x, forward1.y) && IsTileEmptyForMovement(forward1.x, forward1.y) &&
+                    IsValidPosition(forward2.x, forward2.y) && IsTileEmptyForMovement(forward2.x, forward2.y))
+                {
+                    if (!validMoves.Contains(forward2)) validMoves.Add(forward2);
+                }
+            }
+
+            Vector2Int diagLeft = new Vector2Int(currentPos.x - 1, currentPos.y + forwardDir);
+            Vector2Int diagRight = new Vector2Int(currentPos.x + 1, currentPos.y + forwardDir);
+
+            // Kiểm tra chéo Trái
+            if (IsValidPosition(diagLeft.x, diagLeft.y))
+            {
+                var targetLeft = GetEntityAt<ChessPieceRuntime>(diagLeft.x, diagLeft.y);
+                if (targetLeft != null && targetLeft.faction != pieceRuntime.faction)
+                {
+                    validMoves.Add(diagLeft);
+                }
+            }
+
+            if (IsValidPosition(diagRight.x, diagRight.y))
+            {
+                var targetRight = GetEntityAt<ChessPieceRuntime>(diagRight.x, diagRight.y);
+                if (targetRight != null && targetRight.faction != pieceRuntime.faction)
+                {
+                    validMoves.Add(diagRight);
                 }
             }
         }
+        else
+        {
+            List<Vector2Int> directionsToCheck = new List<Vector2Int>(pieceRuntime.currentMoveDirections);
+
+            foreach (Vector2Int dir in directionsToCheck)
+            {
+                for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
+                {
+                    Vector2Int checkPos = currentPos + (dir * i);
+
+                    if (!IsValidPosition(checkPos.x, checkPos.y))
+                        break;
+
+                    ChessPieceRuntime targetPiece = GetEntityAt<ChessPieceRuntime>(checkPos.x, checkPos.y);
+
+                    if (targetPiece != null)
+                    {
+                        if (targetPiece.faction != pieceRuntime.faction)
+                        {
+                            validMoves.Add(checkPos);
+                        }
+
+                        if (pieceRuntime.currentMoveType == MovementType.Slide)
+                            break;
+                    }
+                    else if (IsTileEmptyForMovement(checkPos.x, checkPos.y))
+                    {
+                        validMoves.Add(checkPos);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
         return validMoves;
     }
 }

@@ -313,7 +313,10 @@ public class ServerBoardManager : NetworkBehaviour
             : logicBoard.GetEntityAt<ChessPieceRuntime>(fromPos.x, fromPos.y);
 
         if (runtime != null)
+        {
             logicBoard.MoveEntity(runtime, toPos);
+            runtime.hasMoved = true;
+        }
 
         if (ServerCombatManager.Instance != null && ServerCombatManager.Instance.TryTriggerHiddenMineForMovedPiece(movedFaction, fromPos, toPos))
         {
