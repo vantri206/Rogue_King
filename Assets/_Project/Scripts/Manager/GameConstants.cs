@@ -49,5 +49,6 @@ public enum CardEffectType
     ExtraTurn,          // Bứt Tốc (Thêm Lượt)
     March,              // Hành Quân
     PawnForwardAttack,  // Tốt Ăn Thẳng
-    Recall              // Đánh Úp (Giật ngược)
+    Recall,             // Đánh Úp (Giật ngược)
+    SummonCapturedPawn  // Triệu Hồi Tốt bị ăn: dùng charge kiếm được khi Rogue hạ Tốt đối thủ
 }

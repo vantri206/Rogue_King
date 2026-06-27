@@ -1733,9 +1733,15 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             bool shouldEndTurn = ServerBoardManager.Instance.MovePiece(currentPos, targetPos);
 
+            // MovePiece returns false when the move already triggered a phase/game-state transition
+            // or when another delayed resolver owns the turn end, for example Hidden Mine explosion.
+            // In that case, do not consume ExtraTurn and do not call EndTurn again.
+            if (!shouldEndTurn)
+                return;
+
             if (hasExtraTurn)
             {
-                hasExtraTurn = false; 
+                hasExtraTurn = false;
                 Debug.Log($"[Server] Player {requestingPlayer} kích hoạt Thêm Lượt, KHÔNG qua Turn!");
             }
             else
@@ -1783,12 +1789,25 @@ public class PlayerNetworkController : NetworkBehaviour
     // ==============================================================
 
     [Header("Card System (Networked)")]
-    [SerializeField] private List<CardData> startingDeck; // Kéo thả 1 lá test card vào đây nếu chỉ cần test UI/RPC.
+    [Tooltip("LEGACY/FALLBACK: Deck cũ. Giữ lại để prefab không mất setup cũ. Nếu Rogue King Deck hoặc Chess Alliance Deck trống, server sẽ fallback sang list này.")]
+    [SerializeField] private List<CardData> startingDeck = new List<CardData>();
+
+    [Header("Role Based Card Decks")]
+    [Tooltip("3 card dùng khi player đang cầm Rogue King. Ví dụ: SummonCapturedPawn, SuperBuff, ExtraTurn.")]
+    [SerializeField] private List<CardData> rogueKingDeck = new List<CardData>();
+
+    [Tooltip("3 card dùng khi player đang cầm Chess Alliance. Ví dụ: PawnShield, Recall, March.")]
+    [SerializeField] private List<CardData> chessAllianceDeck = new List<CardData>();
+
+    [Tooltip("Giới hạn số card active theo role. Mặc định = 3 để mỗi phe có đúng 3 card trên hand UI.")]
+    [SerializeField, Min(1)] private int maxActiveCardsPerRole = 3;
+
     private int pendingCardSlotIndex = -1;
     private CardData pendingCardData = null;
 
     [Networked] public NetworkBool hasExtraTurn { get; set; }
     private bool deckInitializedOnServer;
+    private ChessFaction lastInitializedDeckFaction = ChessFaction.Neutral;
 
     // Mảng thẻ bài đồng bộ thời gian thực. Khi Server thay đổi, hàm OnHandCardsChanged sẽ tự động chạy ở Client.
     [Networked, Capacity(10), OnChangedRender(nameof(OnHandCardsChanged))]
@@ -1797,26 +1816,49 @@ public class PlayerNetworkController : NetworkBehaviour
     public static PlayerNetworkController Local => activeLocalInputController;
 
     // Server gọi hàm này lúc mới Spawn để phát bài cho người chơi.
-    // Trả về false khi ServerCardManager chưa sẵn sàng để FixedUpdateNetwork retry ở tick sau.
+    // Trả về false khi ServerCardManager/ServerGameManager chưa sẵn sàng để FixedUpdateNetwork retry ở tick sau.
     private bool TryInitializeDeckOnServer()
     {
         if (!HasStateAuthority) return false;
         if (deckInitializedOnServer) return true;
-        if (startingDeck == null || ServerCardManager.Instance == null) return false;
 
-        for (int i = 0; i < HandCards.Length; i++)
-        {
-            HandCards.Set(i, default);
-        }
+        return ServerRebuildHandForCurrentRole(force: false);
+    }
+
+    /// <summary>
+    /// Server rebuild hand theo role hiện tại của player.
+    /// Phase 1: player đang là Rogue King sẽ nhận rogueKingDeck, player đang là Chess Alliance sẽ nhận chessAllianceDeck.
+    /// Phase 2: sau SwapRoles(), server gọi lại hàm này để đổi hand theo phe mới.
+    /// </summary>
+    public bool ServerRebuildHandForCurrentRole(bool force = true)
+    {
+        if (!HasStateAuthority) return false;
+        if (ServerCardManager.Instance == null || ServerGameManager.Instance == null) return false;
+
+        ChessFaction deckFaction = ResolveCurrentDeckFaction();
+        if (deckFaction == ChessFaction.Neutral)
+            return false;
+
+        if (!force && deckInitializedOnServer && lastInitializedDeckFaction == deckFaction)
+            return true;
+
+        List<CardData> deck = GetDeckForFaction(deckFaction);
+        if (deck == null)
+            return false;
+
+        ClearAllHandCards();
+        hasExtraTurn = false;
 
         int initializedCount = 0;
-        for (int i = 0; i < startingDeck.Count && i < HandCards.Length; i++)
+        int maxCards = Mathf.Clamp(maxActiveCardsPerRole, 1, HandCards.Length);
+
+        for (int sourceIndex = 0; sourceIndex < deck.Count && initializedCount < maxCards; sourceIndex++)
         {
-            CardData cardData = startingDeck[i];
+            CardData cardData = deck[sourceIndex];
             int globalIndex = ServerCardManager.Instance.GetCardIndex(cardData);
             if (cardData == null || globalIndex < 0)
             {
-                Debug.LogWarning($"[Server Card] Bỏ qua card slot {i}: CardData null hoặc chưa được đăng ký trong ServerCardManager.availableCards.");
+                Debug.LogWarning($"[Server Card] Bỏ qua card role={deckFaction} slot {sourceIndex}: CardData null hoặc chưa được đăng ký trong ServerCardManager.availableCards.");
                 continue;
             }
 
@@ -1824,22 +1866,61 @@ public class PlayerNetworkController : NetworkBehaviour
             {
                 cardDataIndex = globalIndex,
                 currentCooldown = 0,
-                remainingUses = Mathf.Max(1, cardData.maxUses),
+                // SummonCapturedPawn dùng charge kiếm được khi Rogue hạ Tốt đối thủ, nên bắt đầu từ 0.
+                // Các card thường vẫn bắt đầu với maxUses như trước.
+                remainingUses = cardData.effectType == CardEffectType.SummonCapturedPawn ? 0 : Mathf.Max(1, cardData.maxUses),
                 isInitialized = true
             };
 
-            HandCards.Set(i, card);
+            HandCards.Set(initializedCount, card);
             initializedCount++;
         }
 
         deckInitializedOnServer = true;
+        lastInitializedDeckFaction = deckFaction;
 
-        if (debugInputLogs)
+        Debug.Log($"[Server Card] Initialized {initializedCount}/{maxCards} active card(s) for player {Object.InputAuthority}. RoleDeck={deckFaction}, NetworkObject={Object.Id}.");
+        return true;
+    }
+
+    private ChessFaction ResolveCurrentDeckFaction()
+    {
+        if (ServerGameManager.Instance == null)
+            return ChessFaction.Neutral;
+
+        if (ServerGameManager.Instance.IsKingPlayer(Object.InputAuthority))
+            return ChessFaction.ChessRogue;
+
+        if (ServerGameManager.Instance.IsChessPlayer(Object.InputAuthority))
+            return ChessFaction.ChessAlliance;
+
+        return ChessFaction.Neutral;
+    }
+
+    private List<CardData> GetDeckForFaction(ChessFaction faction)
+    {
+        List<CardData> roleDeck = faction == ChessFaction.ChessRogue ? rogueKingDeck : chessAllianceDeck;
+
+        if (roleDeck != null && roleDeck.Count > 0)
+            return roleDeck;
+
+        // Fallback giữ tương thích với prefab cũ đang chỉ có startingDeck.
+        if (startingDeck != null && startingDeck.Count > 0)
         {
-            Debug.Log($"[Server Card] Initialized {initializedCount} card(s) for player {Object.InputAuthority} on NetworkObject={Object.Id}.");
+            Debug.LogWarning($"[Server Card] Role deck {faction} is empty on PlayerNetworkController {Object.Id}. Falling back to legacy startingDeck.");
+            return startingDeck;
         }
 
-        return true;
+        Debug.LogWarning($"[Server Card] No card deck assigned for role {faction} on PlayerNetworkController {Object.Id}.");
+        return null;
+    }
+
+    private void ClearAllHandCards()
+    {
+        for (int i = 0; i < HandCards.Length; i++)
+        {
+            HandCards.Set(i, default);
+        }
     }
 
     // Kênh RPC: Client Gửi Yêu Cầu Xài Bài Lên Server
@@ -1866,10 +1947,67 @@ public class PlayerNetworkController : NetworkBehaviour
             }
         }
     }
+
+    public void ClearTemporaryCardState()
+    {
+        if (!HasStateAuthority) return;
+
+        // Runtime-only card effects must not leak through PhaseTransition/GameOver/reset.
+        hasExtraTurn = false;
+        ResetDynamicCardUses(CardEffectType.SummonCapturedPawn);
+    }
+
+    public void AddCardUses(CardEffectType effectType, int amount)
+    {
+        if (!HasStateAuthority || amount <= 0 || ServerCardManager.Instance == null) return;
+
+        for (int i = 0; i < HandCards.Length; i++)
+        {
+            NetworkCardInstance card = HandCards[i];
+            if (!card.isInitialized) continue;
+
+            CardData data = ServerCardManager.Instance.GetCardData(card.cardDataIndex);
+            if (data == null || data.effectType != effectType) continue;
+
+            int cap = Mathf.Max(1, data.maxUses);
+            int before = card.remainingUses;
+            card.remainingUses = Mathf.Clamp(card.remainingUses + amount, 0, cap);
+            HandCards.Set(i, card);
+
+            if (card.remainingUses != before)
+            {
+                Debug.Log($"[Server Card] Added {card.remainingUses - before} use(s) to '{data.cardName}' for {Object.InputAuthority}. Uses={card.remainingUses}/{cap}");
+            }
+
+            return;
+        }
+    }
+
+    private void ResetDynamicCardUses(CardEffectType effectType)
+    {
+        if (!HasStateAuthority || ServerCardManager.Instance == null) return;
+
+        for (int i = 0; i < HandCards.Length; i++)
+        {
+            NetworkCardInstance card = HandCards[i];
+            if (!card.isInitialized) continue;
+
+            CardData data = ServerCardManager.Instance.GetCardData(card.cardDataIndex);
+            if (data == null || data.effectType != effectType) continue;
+
+            if (card.remainingUses != 0 || card.currentCooldown != 0)
+            {
+                card.remainingUses = 0;
+                card.currentCooldown = 0;
+                HandCards.Set(i, card);
+            }
+        }
+    }
+
     public void StartAimingCard(int slotIndex, CardData data)
     {
         // Tự động phân loại: Thẻ nào cần chọn mục tiêu?
-        if (data.effectType == CardEffectType.SuperBuff || data.effectType == CardEffectType.Recall)
+        if (data.effectType == CardEffectType.SuperBuff || data.effectType == CardEffectType.Recall || data.effectType == CardEffectType.SummonCapturedPawn)
         {
             pendingCardSlotIndex = slotIndex;
             pendingCardData = data;
@@ -1886,9 +2024,10 @@ public class PlayerNetworkController : NetworkBehaviour
             Rpc_RequestPlayCard(slotIndex, new Vector2Int(-1, -1));
         }
     }
+
     private void OnHandCardsChanged()
     {
-        // Khi Server cập nhật mảng bài (VD: vừa xài xong, vừa trừ Cooldown), báo cho giao diện Client Refresh
+        // Khi Server cập nhật mảng bài (VD: vừa xài xong, vừa trừ Cooldown, hoặc vừa đổi phase/deck), báo cho giao diện Client Refresh
         InventoryUI ui = FindFirstObjectByType<InventoryUI>();
         if (ui != null) ui.RefreshAllCards();
     }

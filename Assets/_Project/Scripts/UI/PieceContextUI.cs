@@ -61,7 +61,9 @@ public class PieceContextUI : MonoBehaviour
             return;
         }
 
-        RefreshNetworkPieceStats(currentShowingNetworkPiece);
+        if (!TryRefreshNetworkPieceStats(currentShowingNetworkPiece))
+            return;
+
         transform.position = currentShowingNetworkPiece.transform.position + uiOffset;
     }
 
@@ -102,7 +104,12 @@ public class PieceContextUI : MonoBehaviour
         currentShowingPiece = null;
         currentShowingNetworkPiece = piece;
 
-        RefreshNetworkPieceStats(piece);
+        if (!TryRefreshNetworkPieceStats(piece))
+        {
+            Hide();
+            return;
+        }
+
         transform.position = piece.transform.position + uiOffset;
 
         // Online skills are not server-authoritative yet, so do not expose the old offline skill button here.
@@ -123,18 +130,30 @@ public class PieceContextUI : MonoBehaviour
         if (piece == null || currentShowingNetworkPiece != piece || !gameObject.activeSelf)
             return;
 
-        RefreshNetworkPieceStats(piece);
+        TryRefreshNetworkPieceStats(piece);
     }
 
-    private void RefreshNetworkPieceStats(NetworkChessPiece piece)
+    private bool TryRefreshNetworkPieceStats(NetworkChessPiece piece)
     {
-        if (piece == null) return;
+        if (piece == null) return false;
 
-        ChessPieceData data = piece.PieceData;
-        int attack = data != null ? data.baseAttack : 0;
+        try
+        {
+            ChessPieceData data = piece.PieceData;
+            int attack = data != null ? data.baseAttack : 0;
+            int currentHp = piece.currentHp;
 
-        UpdateHealthUI(piece.currentHp);
-        if (atkText != null) atkText.text = data != null ? $"{attack}" : "--";
+            UpdateHealthUI(currentHp);
+            if (atkText != null) atkText.text = data != null ? $"{attack}" : "--";
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // The piece can be despawned while the hover/context UI still references it,
+            // especially when GameOver/PhaseTransition returns clients to menu. Hide safely.
+            Hide();
+            return false;
+        }
     }
 
     private void UpdateHealthUI(int currentHp)

@@ -44,9 +44,8 @@ public class ServerCardManager : NetworkBehaviour
         return availableCards.IndexOf(data);
     }
 
-    // Server-side test flow cho card:
-    // Client bấm card -> server validate lượt/card/target -> trừ Uses/Cooldown -> sync lại UI.
-    // Bản này cố ý chưa apply gameplay effect và không còn phụ thuộc CardEffectType/effectValue trong CardData.
+    // Server-side card flow:
+    // Client bấm card -> server validate lượt/card/target -> apply gameplay effect -> trừ Uses/Cooldown -> sync lại UI.
     public bool ProcessCardRequest(PlayerRef player, PlayerNetworkController controller, int handIndex, Vector2Int targetPos)
     {
         if (!HasStateAuthority || controller == null) return false;
@@ -77,12 +76,16 @@ public class ServerCardManager : NetworkBehaviour
         switch (data.effectType)
         {
             case CardEffectType.SuperBuff:
-                if (targetRuntime != null && targetNetPiece != null)
+                if (targetRuntime != null && targetNetPiece != null && targetRuntime.faction == myFaction)
                 {
+                    // IMPORTANT:
+                    // Do NOT modify targetRuntime.baseData/base ScriptableObject here.
+                    // baseData is shared by all spawned pieces and future phase setup, so changing it
+                    // makes a temporary card buff leak into Phase 2 / later matches.
                     targetRuntime.currentAttack += data.effectValue1;
-                    targetRuntime.baseData.baseHealth += data.effectValue2;
                     targetRuntime.currentHealth += data.effectValue2;
-                    targetNetPiece.currentHp = targetRuntime.currentHealth; // Đồng bộ UI cho Client
+                    targetRuntime.isSuperBuffed = true;
+                    targetNetPiece.currentHp = targetRuntime.currentHealth; // Sync HP UI for clients.
                 }
                 else isSuccess = false;
                 break;
@@ -93,10 +96,13 @@ public class ServerCardManager : NetworkBehaviour
 
             case CardEffectType.March:
                 ForEachFriendlyPiece(myFaction, "Pawn", (runtime, netPiece) => {
+                    // Temporary runtime-only buff. Never mutate ChessPieceData/baseData.
                     runtime.currentMoveRange += data.effectValue1;
-                    runtime.baseData.baseHealth += data.effectValue2;
                     runtime.currentHealth += data.effectValue2;
-                    netPiece.currentHp = runtime.currentHealth;
+                    runtime.isSuperBuffed = true;
+
+                    if (netPiece != null)
+                        netPiece.currentHp = runtime.currentHealth;
                 });
                 break;
 
@@ -107,7 +113,7 @@ public class ServerCardManager : NetworkBehaviour
                 break;
 
             case CardEffectType.Recall:
-                if (targetRuntime != null && ServerBoardManager.Instance != null)
+                if (targetRuntime != null && targetRuntime.faction == myFaction && ServerBoardManager.Instance != null)
                 {
                     Vector2Int oldPos = targetRuntime.previousGridPosition;
                     if (ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(oldPos.x, oldPos.y))
@@ -118,18 +124,69 @@ public class ServerCardManager : NetworkBehaviour
                 }
                 else isSuccess = false;
                 break;
+
+            case CardEffectType.SummonCapturedPawn:
+                isSuccess = TrySummonCapturedPawnCard(player, data, targetPos);
+                break;
+
+            default:
+                isSuccess = false;
+                Debug.LogWarning($"[Server Card] Unsupported card effect type: {data.effectType}");
+                break;
         }
 
         // Nếu xài thành công, trừ Uses, gán Cooldown và báo về Client
         if (isSuccess)
         {
             cardInstance.remainingUses--;
-            cardInstance.currentCooldown = Mathf.Max(0, data.baseCooldown);
+            cardInstance.currentCooldown = data.effectType == CardEffectType.SummonCapturedPawn ? 0 : Mathf.Max(0, data.baseCooldown);
             controller.HandCards.Set(handIndex, cardInstance);
             Debug.Log($"[Server Card] Player {player} used card '{data.cardName}' successfully!");
         }
 
         return isSuccess;
+    }
+
+    private bool TrySummonCapturedPawnCard(PlayerRef player, CardData data, Vector2Int targetPos)
+    {
+        if (ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
+            return false;
+
+        if (!ServerGameManager.Instance.IsKingPlayer(player))
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' can only be used by the Rogue King player.");
+            return false;
+        }
+
+        if (targetPos.x < 0 || targetPos.y < 0)
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires a board target.");
+            return false;
+        }
+
+        if (ServerBoardManager.Instance.logicBoard == null || !ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y))
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' target {targetPos} is invalid.");
+            return false;
+        }
+
+        if (!ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' target {targetPos} is occupied.");
+            return false;
+        }
+
+        ChessPieceData pawnData = data.summonPieceData != null
+            ? data.summonPieceData
+            : ServerBoardManager.Instance.FindFirstPawnData(ChessFaction.ChessRogue);
+
+        if (pawnData == null)
+        {
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' has no summonPieceData and no Pawn data could be found.");
+            return false;
+        }
+
+        return ServerBoardManager.Instance.TrySpawnRuntimePiece(pawnData, targetPos, ChessFaction.ChessRogue);
     }
 
     // Hàm bổ trợ quét bàn cờ
@@ -153,6 +210,18 @@ public class ServerCardManager : NetworkBehaviour
 
     private bool ValidateTargetIfNeeded(CardData data, Vector2Int targetPos)
     {
+        if (data != null && data.effectType == CardEffectType.SummonCapturedPawn)
+        {
+            if (targetPos.x < 0 || targetPos.y < 0)
+                return false;
+
+            return ServerBoardManager.Instance != null &&
+                   ServerBoardManager.Instance.logicBoard != null &&
+                   ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y) &&
+                   ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) &&
+                   ServerBoardManager.Instance.GetPieceAt(targetPos) == null;
+        }
+
         if (string.IsNullOrEmpty(data.requiredTargetName))
             return true;
 

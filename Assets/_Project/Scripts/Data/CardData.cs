@@ -19,4 +19,8 @@ public class CardData : ScriptableObject
 
     public int effectValue1;
     public int effectValue2;
+
+    [Header("Summon Captured Pawn Settings")]
+    [Tooltip("Dùng cho CardEffectType.SummonCapturedPawn. Kéo ChessPieceData của quân Tốt phe Rogue/màu xanh vào đây.")]
+    public ChessPieceData summonPieceData;
 }

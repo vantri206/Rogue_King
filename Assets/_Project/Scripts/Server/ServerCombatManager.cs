@@ -136,7 +136,7 @@ public class ServerCombatManager : NetworkBehaviour
 
         Rpc_PlayCombatVFX(kingPiece.currentGridPos, targetPos, weaponIndex);
 
-        pendingAttackCoroutine = StartCoroutine(ApplyAttackAfterVFXRoutine(effectMap, usedWeapon, weaponIndex, damageDelay));
+        pendingAttackCoroutine = StartCoroutine(ApplyAttackAfterVFXRoutine(requestingPlayer, effectMap, usedWeapon, weaponIndex, damageDelay));
 
         Debug.Log($"[Server Combat] Queued attack {usedWeapon.weaponName} at {targetPos}. Damage will apply after {damageDelay:0.00}s so VFX can finish first.");
 
@@ -205,7 +205,7 @@ public class ServerCombatManager : NetworkBehaviour
             ServerGameManager.Instance.CompleteManualResolve();
     }
 
-    private IEnumerator ApplyAttackAfterVFXRoutine(Dictionary<Vector2Int, List<CombatEffect>> effectMap, WeaponData usedWeapon, int weaponIndex, float delaySeconds)
+    private IEnumerator ApplyAttackAfterVFXRoutine(PlayerRef attackerPlayer, Dictionary<Vector2Int, List<CombatEffect>> effectMap, WeaponData usedWeapon, int weaponIndex, float delaySeconds)
     {
         if (delaySeconds > 0f)
             yield return new WaitForSeconds(delaySeconds);
@@ -231,7 +231,7 @@ public class ServerCombatManager : NetworkBehaviour
             yield break;
         }
 
-        bool killedKing = ApplyResolvedEffects(effectMap, usedWeapon, weaponIndex);
+        bool killedKing = ApplyResolvedEffects(attackerPlayer, effectMap, usedWeapon, weaponIndex);
         attackResolutionInProgress = false;
 
         if (!killedKing && ServerGameManager.Instance.currentGameState == NetGameState.ResolvingAction)
@@ -240,7 +240,7 @@ public class ServerCombatManager : NetworkBehaviour
         }
     }
 
-    private bool ApplyResolvedEffects(Dictionary<Vector2Int, List<CombatEffect>> effectMap, WeaponData usedWeapon, int weaponIndex)
+    private bool ApplyResolvedEffects(PlayerRef attackerPlayer, Dictionary<Vector2Int, List<CombatEffect>> effectMap, WeaponData usedWeapon, int weaponIndex)
     {
         if (effectMap == null || effectMap.Count == 0) return false;
 
@@ -266,7 +266,7 @@ public class ServerCombatManager : NetworkBehaviour
                 continue;
 
             Rpc_PlayPieceDamageVFX(pos, weaponIndex);
-            killedKing = ApplyDamage(targetPiece, totalDamage);
+            killedKing = ApplyDamage(targetPiece, totalDamage, attackerPlayer);
 
             string weaponName = usedWeapon != null ? usedWeapon.weaponName : "UnknownWeapon";
             Debug.Log($"[Server Combat] Target at {pos} took {totalDamage} damage from weapon {weaponName} after VFX resolved. Piece damage/destroyed VFX spawned.");
@@ -363,7 +363,7 @@ public class ServerCombatManager : NetworkBehaviour
                 continue;
 
             Rpc_PlayPieceDamageVFX(pos, mine.WeaponIndex);
-            ApplyDamage(targetPiece, mine.Damage);
+            ApplyDamage(targetPiece, mine.Damage, mine.Owner);
 
             if (ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
             {
@@ -540,7 +540,7 @@ public class ServerCombatManager : NetworkBehaviour
     /// Applies damage to a network piece.
     /// Returns true if this damage defeated a king and caused phase/game-state transition.
     /// </summary>
-    private bool ApplyDamage(NetworkChessPiece targetPiece, int damage)
+    private bool ApplyDamage(NetworkChessPiece targetPiece, int damage, PlayerRef attackerPlayer)
     {
         if (!HasStateAuthority || targetPiece == null || damage <= 0) return false;
 
@@ -564,7 +564,7 @@ public class ServerCombatManager : NetworkBehaviour
 
         if (targetPiece.currentHp <= 0)
         {
-            return ProcessInstaKill(targetPiece);
+            return ProcessInstaKill(targetPiece, attackerPlayer);
         }
 
         return false;
@@ -690,6 +690,11 @@ public class ServerCombatManager : NetworkBehaviour
     /// </summary>
     public bool ProcessInstaKill(NetworkChessPiece targetPiece)
     {
+        return ProcessInstaKill(targetPiece, PlayerRef.None);
+    }
+
+    public bool ProcessInstaKill(NetworkChessPiece targetPiece, PlayerRef killerPlayer)
+    {
         if (!HasStateAuthority || targetPiece == null) return false;
         if (ServerBoardManager.Instance == null) return false;
 
@@ -718,6 +723,8 @@ public class ServerCombatManager : NetworkBehaviour
             Runner.Despawn(targetPiece.Object);
         }
 
+        TryGrantSummonPawnCharge(killerPlayer, runtime, defeatedFaction);
+
         if (ServerGameManager.Instance != null)
         {
             if (wasKing)
@@ -733,6 +740,34 @@ public class ServerCombatManager : NetworkBehaviour
         }
 
         return wasKing;
+    }
+
+    private void TryGrantSummonPawnCharge(PlayerRef killerPlayer, ChessPieceRuntime defeatedRuntime, ChessFaction defeatedFaction)
+    {
+        if (!HasStateAuthority) return;
+        if (ServerGameManager.Instance == null) return;
+        if (defeatedRuntime == null || defeatedRuntime.baseData == null) return;
+        if (defeatedFaction != ChessFaction.ChessAlliance) return;
+        if (string.IsNullOrEmpty(defeatedRuntime.baseData.pieceName) || !defeatedRuntime.baseData.pieceName.Contains("Pawn")) return;
+
+        PlayerRef chargeOwner = killerPlayer;
+        if (chargeOwner == PlayerRef.None)
+        {
+            // Fallback cho các luồng cũ chưa truyền attacker: chỉ cấp charge khi hành động đang thuộc Rogue King.
+            if (ServerGameManager.Instance.currentGameState != NetGameState.KingTurn && ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
+                return;
+
+            chargeOwner = ServerGameManager.Instance.kingPlayer;
+        }
+
+        if (chargeOwner == PlayerRef.None || !ServerGameManager.Instance.IsKingPlayer(chargeOwner))
+            return;
+
+        if (TryGetPlayerController(chargeOwner, out PlayerNetworkController controller) && controller != null)
+        {
+            controller.AddCardUses(CardEffectType.SummonCapturedPawn, 1);
+            Debug.Log($"[Server Card] Rogue captured enemy Pawn '{defeatedRuntime.baseData.pieceName}'. Granted 1 SummonCapturedPawn charge to {chargeOwner}.");
+        }
     }
 
     public override void Despawned(NetworkRunner runner, bool hasState)

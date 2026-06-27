@@ -34,8 +34,7 @@ public class InventoryUI : MonoBehaviour
 
     private void InitializeHand()
     {
-        foreach (Transform child in handContainer) Destroy(child.gameObject);
-        spawnedCards.Clear();
+        ClearSpawnedCards();
 
         int count = 0;
         for (int i = 0; i < PlayerNetworkController.Local.HandCards.Length; i++)
@@ -60,16 +59,62 @@ public class InventoryUI : MonoBehaviour
 
     public void RefreshAllCards()
     {
-        if (PlayerNetworkController.Local == null || ServerCardManager.Instance == null || spawnedCards.Count == 0) return;
+        if (PlayerNetworkController.Local == null || ServerCardManager.Instance == null) return;
+
+        int initializedCardCount = CountInitializedHandCards();
+        if (initializedCardCount <= 0)
+        {
+            ClearSpawnedCards();
+            return;
+        }
+
+        // Khi đổi phase, server rebuild hand theo role mới. Nếu số lượng card thay đổi,
+        // hoặc UI chưa từng sinh card, rebuild lại toàn bộ panel để không giữ card cũ.
+        if (spawnedCards.Count != initializedCardCount)
+        {
+            InitializeHand();
+            return;
+        }
 
         foreach (var cardUI in spawnedCards)
         {
-            int slot = cardUI.GetSlotIndex(); // Lấy đúng thẻ của mình để cập nhật, tránh lệch pha
-            var netCard = PlayerNetworkController.Local.HandCards[slot];
-            CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
+            if (cardUI == null) continue;
 
+            int slot = cardUI.GetSlotIndex(); // Lấy đúng thẻ của mình để cập nhật, tránh lệch pha
+            if (slot < 0 || slot >= PlayerNetworkController.Local.HandCards.Length) continue;
+
+            var netCard = PlayerNetworkController.Local.HandCards[slot];
+            if (!netCard.isInitialized) continue;
+
+            CardData data = ServerCardManager.Instance.GetCardData(netCard.cardDataIndex);
             if (data != null) cardUI.UpdateUI(netCard, data);
         }
+    }
+
+    private int CountInitializedHandCards()
+    {
+        if (PlayerNetworkController.Local == null)
+            return 0;
+
+        int count = 0;
+        for (int i = 0; i < PlayerNetworkController.Local.HandCards.Length; i++)
+        {
+            if (PlayerNetworkController.Local.HandCards[i].isInitialized)
+                count++;
+        }
+
+        return count;
+    }
+
+    private void ClearSpawnedCards()
+    {
+        if (handContainer != null)
+        {
+            foreach (Transform child in handContainer)
+                Destroy(child.gameObject);
+        }
+
+        spawnedCards.Clear();
     }
 
     private void OnCardClicked(int slotIndex)

@@ -12,6 +12,10 @@ public class ServerBoardManager : NetworkBehaviour
 
     [SerializeField] private NetworkPrefabRef networkPiecePrefab;
 
+    [Header("Runtime Spawn Piece Catalog")]
+    [Tooltip("Các ChessPieceData có thể được spawn trong lúc match bằng card/skill, nhưng không nhất thiết nằm trong Initial Pieces. Ví dụ: Tốt Rogue màu xanh cho card SummonCapturedPawn.")]
+    [SerializeField] private List<ChessPieceData> runtimeSpawnablePieceData = new List<ChessPieceData>();
+
     [Header("Scene Visual Board")]
     [Tooltip("Optional. If empty, it is found in the scene. Used only for matching offline board world positions.")]
     [SerializeField] private ChessBoard visualBoard;
@@ -134,6 +138,88 @@ public class ServerBoardManager : NetworkBehaviour
         logicBoard.AddEntity(runtime, setup.startPosition.x, setup.startPosition.y);
     }
 
+    public bool TrySpawnRuntimePiece(ChessPieceData pieceData, Vector2Int spawnPos, ChessFaction faction)
+    {
+        if (!HasStateAuthority) return false;
+        if (pieceData == null)
+        {
+            Debug.LogWarning("[ServerBoardManager] Cannot spawn runtime piece: pieceData is null.");
+            return false;
+        }
+
+        if (logicBoard == null)
+        {
+            Debug.LogWarning("[ServerBoardManager] Cannot spawn runtime piece: logicBoard is null.");
+            return false;
+        }
+
+        if (!networkPiecePrefab.IsValid)
+        {
+            Debug.LogError("[ServerBoardManager] Cannot spawn runtime piece: Network Piece Prefab is not assigned.");
+            return false;
+        }
+
+        if (!logicBoard.IsValidPosition(spawnPos.x, spawnPos.y))
+        {
+            Debug.LogWarning($"[ServerBoardManager] Cannot spawn runtime piece at {spawnPos}: invalid tile.");
+            return false;
+        }
+
+        if (!logicBoard.IsTileEmptyForMovement(spawnPos.x, spawnPos.y) || boardState.ContainsKey(spawnPos))
+        {
+            Debug.LogWarning($"[ServerBoardManager] Cannot spawn runtime piece at {spawnPos}: tile is occupied.");
+            return false;
+        }
+
+        int dataIndex = GetPieceDataIndex(pieceData);
+        if (dataIndex < 0)
+        {
+            Debug.LogWarning($"[ServerBoardManager] Runtime piece '{pieceData.pieceName}' is not registered. Add it to LevelData.initialPieces or ServerBoardManager.runtimeSpawnablePieceData.");
+            return false;
+        }
+
+        InitialPieceSetup setup = new InitialPieceSetup
+        {
+            pieceData = pieceData,
+            startPosition = spawnPos,
+            faction = faction
+        };
+
+        Vector3 worldPos = GridToWorld(spawnPos);
+        NetworkObject netObj = Runner.Spawn(
+            networkPiecePrefab,
+            worldPos,
+            Quaternion.identity,
+            null,
+            (runner, spawnedObject) =>
+            {
+                NetworkChessPiece networkPiece = spawnedObject.GetComponent<NetworkChessPiece>();
+                if (networkPiece != null)
+                {
+                    networkPiece.InitializeFromServerSpawn(dataIndex, setup);
+                }
+            }
+        );
+
+        NetworkChessPiece piece = netObj.GetComponent<NetworkChessPiece>();
+        if (piece == null)
+        {
+            Debug.LogError("[ServerBoardManager] Network Piece Prefab must contain NetworkChessPiece.");
+            Runner.Despawn(netObj);
+            return false;
+        }
+
+        boardState[spawnPos] = piece;
+
+        ChessPieceRuntime runtime = new ChessPieceRuntime(pieceData, spawnPos, faction);
+        runtime.currentHealth = pieceData.baseHealth;
+        runtime.silencedTurnsLeft = 0;
+        logicBoard.AddEntity(runtime, spawnPos.x, spawnPos.y);
+
+        Debug.Log($"[ServerBoardManager] Spawned runtime piece '{pieceData.pieceName}' as {faction} at {spawnPos}.");
+        return true;
+    }
+
     public void ClearBoard()
     {
         if (!HasStateAuthority) return;
@@ -205,7 +291,11 @@ public class ServerBoardManager : NetworkBehaviour
 
         if (boardState.TryGetValue(toPos, out NetworkChessPiece capturedPiece) && capturedPiece != null)
         {
-            bool capturedKing = ServerCombatManager.Instance != null && ServerCombatManager.Instance.ProcessInstaKill(capturedPiece);
+            PlayerRef killerPlayer = PlayerRef.None;
+            if (ServerGameManager.Instance != null)
+                killerPlayer = movedFaction == ChessFaction.ChessRogue ? ServerGameManager.Instance.kingPlayer : ServerGameManager.Instance.chessPlayer;
+
+            bool capturedKing = ServerCombatManager.Instance != null && ServerCombatManager.Instance.ProcessInstaKill(capturedPiece, killerPlayer);
 
             if (capturedKing || ServerGameManager.Instance == null || ServerGameManager.Instance.currentGameState != stateBeforeMove)
             {
@@ -326,13 +416,85 @@ public class ServerBoardManager : NetworkBehaviour
     {
         ResolveSceneReferences();
 
-        if (currentLevelData == null || currentLevelData.initialPieces == null)
+        if (dataIndex < 0)
             return null;
 
-        if (dataIndex < 0 || dataIndex >= currentLevelData.initialPieces.Count)
-            return null;
+        int initialCount = currentLevelData != null && currentLevelData.initialPieces != null
+            ? currentLevelData.initialPieces.Count
+            : 0;
 
-        return currentLevelData.initialPieces[dataIndex].pieceData;
+        if (dataIndex < initialCount)
+            return currentLevelData.initialPieces[dataIndex].pieceData;
+
+        int runtimeIndex = dataIndex - initialCount;
+        if (runtimeSpawnablePieceData != null && runtimeIndex >= 0 && runtimeIndex < runtimeSpawnablePieceData.Count)
+            return runtimeSpawnablePieceData[runtimeIndex];
+
+        return null;
+    }
+
+    public int GetPieceDataIndex(ChessPieceData data)
+    {
+        ResolveSceneReferences();
+
+        if (data == null)
+            return -1;
+
+        if (currentLevelData != null && currentLevelData.initialPieces != null)
+        {
+            for (int i = 0; i < currentLevelData.initialPieces.Count; i++)
+            {
+                if (currentLevelData.initialPieces[i].pieceData == data)
+                    return i;
+            }
+        }
+
+        if (runtimeSpawnablePieceData != null)
+        {
+            for (int i = 0; i < runtimeSpawnablePieceData.Count; i++)
+            {
+                if (runtimeSpawnablePieceData[i] == data)
+                {
+                    int initialCount = currentLevelData != null && currentLevelData.initialPieces != null
+                        ? currentLevelData.initialPieces.Count
+                        : 0;
+                    return initialCount + i;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    public ChessPieceData FindFirstPawnData(ChessFaction preferredFaction)
+    {
+        ResolveSceneReferences();
+
+        if (runtimeSpawnablePieceData != null)
+        {
+            foreach (ChessPieceData data in runtimeSpawnablePieceData)
+            {
+                if (data != null && !string.IsNullOrEmpty(data.pieceName) && data.pieceName.Contains("Pawn"))
+                    return data;
+            }
+        }
+
+        if (currentLevelData != null && currentLevelData.initialPieces != null)
+        {
+            foreach (InitialPieceSetup setup in currentLevelData.initialPieces)
+            {
+                if (setup.pieceData != null && setup.faction == preferredFaction && !string.IsNullOrEmpty(setup.pieceData.pieceName) && setup.pieceData.pieceName.Contains("Pawn"))
+                    return setup.pieceData;
+            }
+
+            foreach (InitialPieceSetup setup in currentLevelData.initialPieces)
+            {
+                if (setup.pieceData != null && !string.IsNullOrEmpty(setup.pieceData.pieceName) && setup.pieceData.pieceName.Contains("Pawn"))
+                    return setup.pieceData;
+            }
+        }
+
+        return null;
     }
 
     public Vector3 GridToWorld(Vector2Int gridPos)

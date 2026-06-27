@@ -13,9 +13,11 @@ MonoBehaviour:
   m_Name: SuperBuff
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: SuperBuff
+  cardArtwork: {fileID: 913314834325009863, guid: 05f4fa2b656b405449d8704d826243d4, type: 3}
   effectType: 6
   requiredTargetName: 
   baseCooldown: 2
   maxUses: 2
-  effectValue1: 50
-  effectValue2: 150
+  effectValue1: 5
+  effectValue2: 10
+  summonPieceData: {fileID: 0}

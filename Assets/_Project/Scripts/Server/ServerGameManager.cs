@@ -112,6 +112,10 @@ public class ServerGameManager : NetworkBehaviour
         ClearMatchResultFields();
         ClearPlayerWeaponCooldowns(p1);
         ClearPlayerWeaponCooldowns(p2);
+        ClearTemporaryPlayerCardStates(p1);
+        ClearTemporaryPlayerCardStates(p2);
+        RebuildPlayerCardsForCurrentRole(p1);
+        RebuildPlayerCardsForCurrentRole(p2);
 
         Debug.Log($"[Server] Assigned Roles - King: {p1}, Chess: {p2}");
     }
@@ -344,6 +348,27 @@ public class ServerGameManager : NetworkBehaviour
         if (controller != null)
             controller.ClearWeaponCooldowns();
     }
+    private void ClearTemporaryPlayerCardStates(PlayerRef player)
+    {
+        if (player == PlayerRef.None)
+            return;
+
+        var playerObj = Runner != null ? Runner.GetPlayerObject(player) : null;
+        var controller = playerObj != null ? playerObj.GetComponent<PlayerNetworkController>() : null;
+        if (controller != null)
+            controller.ClearTemporaryCardState();
+    }
+
+    private void RebuildPlayerCardsForCurrentRole(PlayerRef player)
+    {
+        if (player == PlayerRef.None)
+            return;
+
+        var playerObj = Runner != null ? Runner.GetPlayerObject(player) : null;
+        var controller = playerObj != null ? playerObj.GetComponent<PlayerNetworkController>() : null;
+        if (controller != null)
+            controller.ServerRebuildHandForCurrentRole(force: true);
+    }
 
     public void BeginManualResolve(NetGameState nextState)
     {
@@ -462,6 +487,8 @@ public class ServerGameManager : NetworkBehaviour
 
         graveyard.Clear();
         hasUsedPawnShieldThisTurn = false;
+        ClearTemporaryPlayerCardStates(kingPlayer);
+        ClearTemporaryPlayerCardStates(chessPlayer);
         phase1TurnCount = 0;
         phase2TurnCount = 0;
         currentPhase = GamePhase.Phase1;
@@ -515,6 +542,11 @@ public class ServerGameManager : NetworkBehaviour
 
         currentPhase = GamePhase.Phase2;
         SwapRoles();
+
+        ClearTemporaryPlayerCardStates(kingPlayer);
+        ClearTemporaryPlayerCardStates(chessPlayer);
+        RebuildPlayerCardsForCurrentRole(kingPlayer);
+        RebuildPlayerCardsForCurrentRole(chessPlayer);
 
         if (ServerBoardManager.Instance != null)
             ServerBoardManager.Instance.ClearBoard();

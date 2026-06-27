@@ -117,6 +117,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     private bool runtimeQuickMatch;
     private bool runtimeLobbyMode;
     private bool currentRunIsLobby;
+    private bool currentRunWasServerLike;
     private bool clientSwitchingFromLobbyToMatch;
     private bool pendingLobbyMatchRequest;
     private bool pendingLeaderboardRefreshRequest;
@@ -568,6 +569,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         GameMode gameMode = ResolveGameMode();
+        currentRunWasServerLike = gameMode == GameMode.Server || gameMode == GameMode.Host;
         currentRunIsLobby = ResolveLobbySessionMode(gameMode);
         maxPlayers = ResolveMaxPlayers();
 
@@ -575,12 +577,13 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         string sessionName = ResolveSessionName(gameMode, quickMatch);
         string region = ResolveRegion();
 
-        // Keep the NetworkRunner on its own child GameObject.
-        // Fusion Shutdown() may destroy the runner GameObject. If the runner lives on this
-        // NetworkRunnerHandler bootstrap object, the lobby->match coroutine can be killed
-        // immediately after leaving the lobby and never reach StartGame() for RogueKingRoom.
+        // Keep the NetworkRunner on its own root GameObject.
+        // It must be a root object because Fusion/Unity can call DontDestroyOnLoad on it;
+        // making it a child causes "DontDestroyOnLoad only works for root GameObjects" warnings.
+        // It still must not live on this NetworkRunnerHandler bootstrap object, otherwise
+        // Shutdown() during lobby->match switching can destroy the coroutine owner.
         GameObject runnerObject = new GameObject(currentRunIsLobby ? "LobbyNetworkRunner" : "MatchNetworkRunner");
-        runnerObject.transform.SetParent(transform, false);
+        DontDestroyOnLoad(runnerObject);
 
         runner = runnerObject.AddComponent<NetworkRunner>();
         runner.ProvideInput = gameMode == GameMode.Client || gameMode == GameMode.Host;
@@ -641,6 +644,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         runtimeQuickMatch = false;
         runtimeLobbyMode = false;
         currentRunIsLobby = false;
+        currentRunWasServerLike = false;
         pendingLobbyMatchRequest = false;
         pendingLeaderboardRefreshRequest = false;
         pendingLobbyCreateRoomRequest = false;
@@ -1598,6 +1602,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     void INetworkRunnerCallbacks.OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
     {
         Debug.LogWarning($"[Client] Disconnected from server/session. Reason={reason}");
+        if (currentRunWasServerLike)
+            return;
+
         if (!clientSwitchingFromLobbyToMatch)
             QueueClientReturnToMenu($"Disconnected: {reason}");
     }
@@ -1610,6 +1617,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
     {
         Debug.LogWarning($"[NetworkRunnerHandler] Runner shutdown: {shutdownReason}");
+
+        if (currentRunWasServerLike)
+            return;
 
         if (runner != null && !runner.IsServer && !clientSwitchingFromLobbyToMatch)
             QueueClientReturnToMenu($"Runner shutdown: {shutdownReason}");
@@ -1624,7 +1634,8 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return;
 
         // Server process should never load the player menu because of a disconnect callback.
-        if (runner != null && runner.IsServer)
+        // During StartGame failure, runner.IsServer can still be false, so also check the intended mode.
+        if (currentRunWasServerLike || (runner != null && runner.IsServer))
             return;
 
         clientReturnToMenuQueued = true;
@@ -1682,6 +1693,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         runtimeQuickMatch = false;
         runtimeLobbyMode = false;
         currentRunIsLobby = false;
+        currentRunWasServerLike = false;
         pendingLobbyMatchRequest = false;
         pendingLeaderboardRefreshRequest = false;
         pendingLobbyCreateRoomRequest = false;
