@@ -729,7 +729,7 @@ public class ServerCombatManager : NetworkBehaviour
         {
             if (wasKing)
             {
-                ServerGameManager.Instance.OnKingDefeated();
+                ServerGameManager.Instance.OnKingDefeated(defeatedFaction);
             }
             else if (defeatedFaction == ChessFaction.ChessAlliance &&
                      !ServerBoardManager.Instance.HasAnyPieceOfFaction(ChessFaction.ChessAlliance))
