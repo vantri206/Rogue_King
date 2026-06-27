@@ -75,6 +75,8 @@ MonoBehaviour:
   autoReturnToMenuAfterGameOverDelaySeconds: 0.75
   startingDeck:
   - {fileID: 11400000, guid: 7665be157ae4db944ba6e2ccc4e454d3, type: 2}
+  - {fileID: 11400000, guid: 7665be157ae4db944ba6e2ccc4e454d3, type: 2}
+  - {fileID: 11400000, guid: 7665be157ae4db944ba6e2ccc4e454d3, type: 2}
   rogueKingDeck:
   - {fileID: 11400000, guid: 4a20f1bc3c854a446b9b6f0487885897, type: 2}
   - {fileID: 11400000, guid: 94b6aef2e4d08de40a4ac09feb479c3d, type: 2}
