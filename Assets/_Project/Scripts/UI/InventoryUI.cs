@@ -127,4 +127,13 @@ public class InventoryUI : MonoBehaviour
             PlayerNetworkController.Local.StartAimingCard(slotIndex, data);
         }
     }
+    public void ToggleHandPanel()
+    {
+        if (handContainer != null)
+        {
+            bool currentState = handContainer.gameObject.activeSelf;
+
+            handContainer.gameObject.SetActive(!currentState);
+        }
+    }
 }

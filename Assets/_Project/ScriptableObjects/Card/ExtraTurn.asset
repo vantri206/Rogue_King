@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ExtraTurn
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: ExtraTurn
-  cardArtwork: {fileID: 3237626309212567894, guid: 0fa7b9fc1dc8cfc4fb27637ae491bed7, type: 3}
+  cardArtwork: {fileID: -2790212338442432957, guid: 199c66ad10ec186429dbe992931e9dff, type: 3}
   effectType: 7
   requiredTargetName: 
   baseCooldown: 3
