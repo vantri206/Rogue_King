@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: March
   cardArtwork: {fileID: 2517615454575166232, guid: 0f6b0352ee5806b41b41dd119b884d80, type: 3}
+  cardRole: 1
   effectType: 8
   requiredTargetName: 
   baseCooldown: 0

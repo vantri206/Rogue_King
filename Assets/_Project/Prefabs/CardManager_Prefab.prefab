@@ -47,7 +47,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CardManager
   chessBoard: {fileID: 0}
-  playerControl: {fileID: 0}
 --- !u!114 &4848230382809769318
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -60,8 +59,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1148cbf7fd7b6e43ae172b0d13c42f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
-  startingDeck:
-  - {fileID: 11400000, guid: 4c4f88654b985944f97a9a0b8f7737d4, type: 2}
+  startingDeck: []
   handCards: []
 --- !u!114 &5460377832949566477
 MonoBehaviour:

@@ -19,9 +19,9 @@ MonoBehaviour:
   maxMoveRange: 1
   pieceSprite: {fileID: -273549975102399819, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
   pieceAnimator: {fileID: 22100000, guid: 2630444ec926a1848a7f9cc9f3aaea3f, type: 2}
-  movePatternGrid: 00000000000000000100000000010000000001000000000000
+  movePatternGrid: 00000000000001000000000100000000010000000000000000
   moveDirections:
-  - {x: 1, y: 1}
-  - {x: 1, y: 0}
-  - {x: 1, y: -1}
+  - {x: -1, y: 1}
+  - {x: -1, y: 0}
+  - {x: -1, y: -1}
   equippedWeapon: {fileID: 0}

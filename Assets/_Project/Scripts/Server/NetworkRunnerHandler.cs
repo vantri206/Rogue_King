@@ -124,6 +124,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     private string runtimeSessionOverride;
     private string pendingRoomCodeForMatch;
     private string currentRoomCode;
+    private bool pendingPreMatchCardSelection;
+    private string pendingCardSelectionSessionName;
+    private string pendingCardSelectionRoomCode;
     private readonly List<PlayerRef> lobbyReadyPlayers = new List<PlayerRef>();
 
     private sealed class LobbyCustomRoomReservation
@@ -446,7 +449,64 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (clientSwitchingFromLobbyToMatch)
             return;
 
-        StartCoroutine(ClientSwitchFromLobbyToMatchRoutine(matchSessionName.Trim(), SanitizeRoomCode(roomCode)));
+        matchSessionName = matchSessionName.Trim();
+        roomCode = SanitizeRoomCode(roomCode);
+
+        // New flow: match-found means "show pre-match card selection" first.
+        // Fight! will call ClientConfirmCardSelectionAndJoinMatch(), then the old lobby->match switch runs.
+        PreMatchCardSelectionUI selectionUI = FindFirstObjectByType<PreMatchCardSelectionUI>(FindObjectsInactive.Include);
+        if (selectionUI != null)
+        {
+            pendingPreMatchCardSelection = true;
+            pendingCardSelectionSessionName = matchSessionName;
+            pendingCardSelectionRoomCode = roomCode;
+            pendingLobbyMatchRequest = false;
+            pendingLobbyCreateRoomRequest = false;
+            pendingLobbyJoinRoomRequest = false;
+            Debug.Log($"[Lobby] Match found. Opening pre-match card selection. Session='{matchSessionName}', RoomCode='{roomCode}'.");
+            selectionUI.ShowForMatch(matchSessionName, roomCode);
+            MatchmakingMenuUI menu = FindFirstObjectByType<MatchmakingMenuUI>(FindObjectsInactive.Include);
+            if (menu != null)
+                menu.NotifyPreMatchCardSelectionOpened();
+            return;
+        }
+
+        StartCoroutine(ClientSwitchFromLobbyToMatchRoutine(matchSessionName, roomCode));
+    }
+
+    public void ClientConfirmCardSelectionAndJoinMatch()
+    {
+        if (clientSwitchingFromLobbyToMatch)
+            return;
+
+        string sessionName = pendingPreMatchCardSelection && !string.IsNullOrWhiteSpace(pendingCardSelectionSessionName)
+            ? pendingCardSelectionSessionName
+            : lobbyMatchSessionName;
+
+        string roomCode = pendingPreMatchCardSelection ? pendingCardSelectionRoomCode : string.Empty;
+
+        pendingPreMatchCardSelection = false;
+        pendingCardSelectionSessionName = null;
+        pendingCardSelectionRoomCode = null;
+
+        StartCoroutine(ClientSwitchFromLobbyToMatchRoutine(sessionName, SanitizeRoomCode(roomCode)));
+    }
+
+    public void ClientCancelCardSelectionAndStayInLobby()
+    {
+        pendingPreMatchCardSelection = false;
+        pendingCardSelectionSessionName = null;
+        pendingCardSelectionRoomCode = null;
+        pendingLobbyMatchRequest = false;
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomCode = null;
+
+        MatchmakingMenuUI menu = FindFirstObjectByType<MatchmakingMenuUI>(FindObjectsInactive.Include);
+        if (menu != null)
+            menu.ShowLobbyRoomError("Đã hủy chọn card. Bạn đã rời matchmaking.");
+
+        Debug.Log("[Lobby] Player cancelled pre-match card selection and stayed in lobby.");
     }
 
     private System.Collections.IEnumerator ClientSwitchFromLobbyToMatchRoutine(string matchSessionName, string roomCode)
@@ -472,6 +532,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         pendingLobbyMatchRequest = false;
         pendingLeaderboardRefreshRequest = false;
+        pendingPreMatchCardSelection = false;
+        pendingCardSelectionSessionName = null;
+        pendingCardSelectionRoomCode = null;
         clientReturnToMenuQueued = false;
 
         float delay = Mathf.Max(0f, lobbyToMatchSwitchDelaySeconds);

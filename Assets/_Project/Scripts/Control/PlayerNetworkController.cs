@@ -65,6 +65,7 @@ public class PlayerNetworkController : NetworkBehaviour
     private static PlayerNetworkController activeLocalInputController;
     private bool localInputEnabled;
     private bool localProfileSubmitted;
+    private bool localCardLoadoutSubmitted;
     private bool gameOverReturnQueued;
 
     private ClientInputState currentState = ClientInputState.Idle;
@@ -102,6 +103,7 @@ public class PlayerNetworkController : NetworkBehaviour
         // và HandCards sẽ không bao giờ được initialize cho client.
         if (HasStateAuthority)
         {
+            ClearSubmittedCardLoadout();
             TryInitializeDeckOnServer();
         }
 
@@ -109,6 +111,7 @@ public class PlayerNetworkController : NetworkBehaviour
             return;
 
         TrySubmitLocalProfileToServer();
+        TrySubmitLocalCardLoadoutToServer();
         ResolveSceneReferences();
         InitializeWeaponUIIfPossible();
 
@@ -170,6 +173,7 @@ public class PlayerNetworkController : NetworkBehaviour
 
         localInputEnabled = false;
         localProfileSubmitted = false;
+        localCardLoadoutSubmitted = false;
     }
 
     private bool IsLocalInputActive()
@@ -567,6 +571,7 @@ public class PlayerNetworkController : NetworkBehaviour
         if (!IsLocalInputActive()) return;
 
         TrySubmitLocalProfileToServer();
+        TrySubmitLocalCardLoadoutToServer();
         ResolveSceneReferences();
         InitializeWeaponUIIfPossible();
         RefreshWeaponCooldownUI();
@@ -1799,8 +1804,24 @@ public class PlayerNetworkController : NetworkBehaviour
     [Tooltip("3 card dùng khi player đang cầm Chess Alliance. Ví dụ: PawnShield, Recall, March.")]
     [SerializeField] private List<CardData> chessAllianceDeck = new List<CardData>();
 
-    [Tooltip("Giới hạn số card active theo role. Mặc định = 3 để mỗi phe có đúng 3 card trên hand UI.")]
-    [SerializeField, Min(1)] private int maxActiveCardsPerRole = 3;
+    [Tooltip("Số card tối đa khi player đang cầm Rogue King.")]
+    [SerializeField, Min(1)] private int maxRogueKingActiveCards = PlayerSelectedCardLoadout.MaxRogueKingCards;
+
+    [Tooltip("Số card tối đa khi player đang cầm Chess Alliance.")]
+    [SerializeField, Min(1)] private int maxChessAllianceActiveCards = PlayerSelectedCardLoadout.MaxChessAllianceCards;
+
+    [Tooltip("Đúng theo rule chọn bài trước trận: mỗi card đã chọn chỉ có 1 lần dùng trong match. SummonCapturedPawn vẫn bắt đầu 0 charge như cũ.")]
+    [SerializeField] private bool selectedLoadoutCardsUseSingleUse = true;
+
+    [Header("Selected Card Loadout (Client -> Server)")]
+    [Networked] public NetworkBool HasSubmittedCardLoadout { get; private set; }
+    [Networked] public int SelectedRogueKingCard0 { get; private set; }
+    [Networked] public int SelectedRogueKingCard1 { get; private set; }
+    [Networked] public int SelectedRogueKingCard2 { get; private set; }
+    [Networked] public int SelectedChessAllianceCard0 { get; private set; }
+    [Networked] public int SelectedChessAllianceCard1 { get; private set; }
+    [Networked] public int SelectedChessAllianceCard2 { get; private set; }
+    [Networked] public int SelectedChessAllianceCard3 { get; private set; }
 
     private int pendingCardSlotIndex = -1;
     private CardData pendingCardData = null;
@@ -1850,7 +1871,7 @@ public class PlayerNetworkController : NetworkBehaviour
         hasExtraTurn = false;
 
         int initializedCount = 0;
-        int maxCards = Mathf.Clamp(maxActiveCardsPerRole, 1, HandCards.Length);
+        int maxCards = Mathf.Clamp(GetMaxCardsForFaction(deckFaction), 1, HandCards.Length);
 
         for (int sourceIndex = 0; sourceIndex < deck.Count && initializedCount < maxCards; sourceIndex++)
         {
@@ -1867,8 +1888,8 @@ public class PlayerNetworkController : NetworkBehaviour
                 cardDataIndex = globalIndex,
                 currentCooldown = 0,
                 // SummonCapturedPawn dùng charge kiếm được khi Rogue hạ Tốt đối thủ, nên bắt đầu từ 0.
-                // Các card thường vẫn bắt đầu với maxUses như trước.
-                remainingUses = cardData.effectType == CardEffectType.SummonCapturedPawn ? 0 : Mathf.Max(1, cardData.maxUses),
+                // Các card trong loadout chọn trước trận mặc định chỉ dùng 1 lần/card.
+                remainingUses = ResolveInitialCardUses(cardData),
                 isInitialized = true
             };
 
@@ -1899,20 +1920,100 @@ public class PlayerNetworkController : NetworkBehaviour
 
     private List<CardData> GetDeckForFaction(ChessFaction faction)
     {
-        List<CardData> roleDeck = faction == ChessFaction.ChessRogue ? rogueKingDeck : chessAllianceDeck;
+        List<CardData> selectedDeck = GetSubmittedDeckForFaction(faction);
+        if (selectedDeck != null && selectedDeck.Count > 0)
+            return selectedDeck;
 
-        if (roleDeck != null && roleDeck.Count > 0)
-            return roleDeck;
+        List<CardData> roleDeck = faction == ChessFaction.ChessRogue ? rogueKingDeck : chessAllianceDeck;
+        List<CardData> filteredRoleDeck = FilterDeckByFaction(roleDeck, faction);
+        if (filteredRoleDeck.Count > 0)
+            return filteredRoleDeck;
 
         // Fallback giữ tương thích với prefab cũ đang chỉ có startingDeck.
-        if (startingDeck != null && startingDeck.Count > 0)
+        List<CardData> filteredLegacyDeck = FilterDeckByFaction(startingDeck, faction);
+        if (filteredLegacyDeck.Count > 0)
         {
-            Debug.LogWarning($"[Server Card] Role deck {faction} is empty on PlayerNetworkController {Object.Id}. Falling back to legacy startingDeck.");
-            return startingDeck;
+            Debug.LogWarning($"[Server Card] Role deck {faction} is empty on PlayerNetworkController {Object.Id}. Falling back to filtered legacy startingDeck.");
+            return filteredLegacyDeck;
         }
 
-        Debug.LogWarning($"[Server Card] No card deck assigned for role {faction} on PlayerNetworkController {Object.Id}.");
+        Debug.LogWarning($"[Server Card] No card deck assigned/submitted for role {faction} on PlayerNetworkController {Object.Id}.");
         return null;
+    }
+
+    private List<CardData> GetSubmittedDeckForFaction(ChessFaction faction)
+    {
+        List<CardData> result = new List<CardData>();
+        if (!HasSubmittedCardLoadout || ServerCardManager.Instance == null)
+            return result;
+
+        int[] indices = faction == ChessFaction.ChessRogue
+            ? new[] { SelectedRogueKingCard0, SelectedRogueKingCard1, SelectedRogueKingCard2 }
+            : new[] { SelectedChessAllianceCard0, SelectedChessAllianceCard1, SelectedChessAllianceCard2, SelectedChessAllianceCard3 };
+
+        HashSet<int> used = new HashSet<int>();
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int index = indices[i];
+            if (index < 0 || used.Contains(index))
+                continue;
+
+            CardData data = ServerCardManager.Instance.GetCardData(index);
+            if (data == null || !ServerCardManager.Instance.IsCardAllowedForFaction(data, faction))
+            {
+                Debug.LogWarning($"[Server Card] Ignored submitted card index {index} for faction {faction}. Card missing or wrong cardRole.");
+                continue;
+            }
+
+            used.Add(index);
+            result.Add(data);
+        }
+
+        return result;
+    }
+
+    private List<CardData> FilterDeckByFaction(List<CardData> source, ChessFaction faction)
+    {
+        List<CardData> result = new List<CardData>();
+        if (source == null || ServerCardManager.Instance == null)
+            return result;
+
+        HashSet<CardData> used = new HashSet<CardData>();
+        for (int i = 0; i < source.Count; i++)
+        {
+            CardData data = source[i];
+            if (data == null || used.Contains(data))
+                continue;
+
+            if (!ServerCardManager.Instance.IsCardAllowedForFaction(data, faction))
+            {
+                Debug.LogWarning($"[Server Card] Card '{data.cardName}' is in the {faction} deck but cardRole={data.cardRole}. Skipped.");
+                continue;
+            }
+
+            used.Add(data);
+            result.Add(data);
+        }
+
+        return result;
+    }
+
+    private int GetMaxCardsForFaction(ChessFaction faction)
+    {
+        return faction == ChessFaction.ChessRogue
+            ? Mathf.Max(1, maxRogueKingActiveCards)
+            : Mathf.Max(1, maxChessAllianceActiveCards);
+    }
+
+    private int ResolveInitialCardUses(CardData cardData)
+    {
+        if (cardData == null)
+            return 0;
+
+        if (cardData.effectType == CardEffectType.SummonCapturedPawn)
+            return 0;
+
+        return selectedLoadoutCardsUseSingleUse ? 1 : Mathf.Max(1, cardData.maxUses);
     }
 
     private void ClearAllHandCards()
@@ -1921,6 +2022,88 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             HandCards.Set(i, default);
         }
+    }
+
+    private void TrySubmitLocalCardLoadoutToServer()
+    {
+        if (!HasInputAuthority || localCardLoadoutSubmitted)
+            return;
+
+        PlayerSelectedCardLoadout.Load();
+        int[] rogue = PlayerSelectedCardLoadout.GetRogueKingCardIndices();
+        int[] chess = PlayerSelectedCardLoadout.GetChessAllianceCardIndices();
+
+        Rpc_SubmitSelectedCardLoadout(
+            GetArrayValueOrDefault(rogue, 0),
+            GetArrayValueOrDefault(rogue, 1),
+            GetArrayValueOrDefault(rogue, 2),
+            GetArrayValueOrDefault(chess, 0),
+            GetArrayValueOrDefault(chess, 1),
+            GetArrayValueOrDefault(chess, 2),
+            GetArrayValueOrDefault(chess, 3)
+        );
+
+        localCardLoadoutSubmitted = true;
+    }
+
+    private static int GetArrayValueOrDefault(int[] values, int index)
+    {
+        return values != null && index >= 0 && index < values.Length ? values[index] : -1;
+    }
+
+    [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_SubmitSelectedCardLoadout(int r0, int r1, int r2, int c0, int c1, int c2, int c3, RpcInfo info = default)
+    {
+        if (!HasStateAuthority || info.Source != Object.InputAuthority)
+            return;
+
+        ApplySubmittedCardLoadout(r0, r1, r2, c0, c1, c2, c3);
+        ServerRebuildHandForCurrentRole(force: true);
+    }
+
+    private void ApplySubmittedCardLoadout(int r0, int r1, int r2, int c0, int c1, int c2, int c3)
+    {
+        SelectedRogueKingCard0 = SanitizeSubmittedCardIndex(r0, ChessFaction.ChessRogue, -1, -1, -1);
+        SelectedRogueKingCard1 = SanitizeSubmittedCardIndex(r1, ChessFaction.ChessRogue, SelectedRogueKingCard0, -1, -1);
+        SelectedRogueKingCard2 = SanitizeSubmittedCardIndex(r2, ChessFaction.ChessRogue, SelectedRogueKingCard0, SelectedRogueKingCard1, -1);
+
+        SelectedChessAllianceCard0 = SanitizeSubmittedCardIndex(c0, ChessFaction.ChessAlliance, -1, -1, -1);
+        SelectedChessAllianceCard1 = SanitizeSubmittedCardIndex(c1, ChessFaction.ChessAlliance, SelectedChessAllianceCard0, -1, -1);
+        SelectedChessAllianceCard2 = SanitizeSubmittedCardIndex(c2, ChessFaction.ChessAlliance, SelectedChessAllianceCard0, SelectedChessAllianceCard1, -1);
+        SelectedChessAllianceCard3 = SanitizeSubmittedCardIndex(c3, ChessFaction.ChessAlliance, SelectedChessAllianceCard0, SelectedChessAllianceCard1, SelectedChessAllianceCard2);
+
+        HasSubmittedCardLoadout = true;
+
+        Debug.Log($"[Server CardLoadout] Player {Object.InputAuthority} submitted selected cards. Rogue=[{SelectedRogueKingCard0},{SelectedRogueKingCard1},{SelectedRogueKingCard2}], Chess=[{SelectedChessAllianceCard0},{SelectedChessAllianceCard1},{SelectedChessAllianceCard2},{SelectedChessAllianceCard3}]");
+    }
+
+    private int SanitizeSubmittedCardIndex(int cardIndex, ChessFaction faction, int used0, int used1, int used2)
+    {
+        if (cardIndex < 0)
+            return -1;
+
+        if (cardIndex == used0 || cardIndex == used1 || cardIndex == used2)
+            return -1;
+
+        if (ServerCardManager.Instance == null || !ServerCardManager.Instance.IsCardIndexAllowedForFaction(cardIndex, faction))
+            return -1;
+
+        return cardIndex;
+    }
+
+    private void ClearSubmittedCardLoadout()
+    {
+        if (!HasStateAuthority)
+            return;
+
+        HasSubmittedCardLoadout = false;
+        SelectedRogueKingCard0 = -1;
+        SelectedRogueKingCard1 = -1;
+        SelectedRogueKingCard2 = -1;
+        SelectedChessAllianceCard0 = -1;
+        SelectedChessAllianceCard1 = -1;
+        SelectedChessAllianceCard2 = -1;
+        SelectedChessAllianceCard3 = -1;
     }
 
     // Kênh RPC: Client Gửi Yêu Cầu Xài Bài Lên Server
@@ -2006,22 +2189,48 @@ public class PlayerNetworkController : NetworkBehaviour
 
     public void StartAimingCard(int slotIndex, CardData data)
     {
-        // Tự động phân loại: Thẻ nào cần chọn mục tiêu?
-        if (data.effectType == CardEffectType.SuperBuff || data.effectType == CardEffectType.Recall || data.effectType == CardEffectType.SummonCapturedPawn)
+        if (data == null)
+            return;
+
+        bool needsTarget = ServerCardManager.Instance != null
+            ? ServerCardManager.Instance.DoesCardNeedBoardTarget(data)
+            : DoesCardNeedBoardTargetFallback(data);
+
+        if (needsTarget)
         {
             pendingCardSlotIndex = slotIndex;
             pendingCardData = data;
-            currentState = ClientInputState.AimingCard; // Chuyển sang trạng thái NGẮM
+            currentState = ClientInputState.AimingCard;
 
-            // Xóa các ô đang highlight trên bàn cờ
             ClearAllHighlights();
             Debug.Log($"🟨 [Client Input] Đang ngắm thẻ '{data.cardName}'. Hãy CLICK CHỌN 1 Ô TRÊN BÀN CỜ để sử dụng!");
         }
         else
         {
-            // Thẻ toàn sân (Bứt Tốc, Hành Quân) -> Bắn thẳng lên Server, không cần ngắm
             Debug.Log($"🟩 [Client Input] Thẻ '{data.cardName}' không cần mục tiêu. Kích hoạt ngay!");
             Rpc_RequestPlayCard(slotIndex, new Vector2Int(-1, -1));
+        }
+    }
+
+    private static bool DoesCardNeedBoardTargetFallback(CardData data)
+    {
+        if (data == null)
+            return false;
+
+        if (!string.IsNullOrEmpty(data.requiredTargetName))
+            return true;
+
+        switch (data.effectType)
+        {
+            case CardEffectType.SuperBuff:
+            case CardEffectType.Recall:
+            case CardEffectType.SummonCapturedPawn:
+            case CardEffectType.PawnShield:
+            case CardEffectType.KingDash:
+            case CardEffectType.KingSweep:
+                return true;
+            default:
+                return false;
         }
     }
 

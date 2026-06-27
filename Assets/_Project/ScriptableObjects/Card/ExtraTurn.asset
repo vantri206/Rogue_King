@@ -12,10 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1292160660239bc469727b2c31fb6035, type: 3}
   m_Name: ExtraTurn
   m_EditorClassIdentifier: Assembly-CSharp::CardData
-  cardName: ExtraTurn
+  cardName: Extra Turn
   cardArtwork: {fileID: 3237626309212567894, guid: 0fa7b9fc1dc8cfc4fb27637ae491bed7, type: 3}
+  cardRole: 0
   effectType: 7
-  requiredTargetName: 
+  requiredTargetName: King
   baseCooldown: 3
   maxUses: 1
   effectValue1: 0

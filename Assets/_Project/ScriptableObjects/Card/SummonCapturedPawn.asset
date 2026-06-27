@@ -12,10 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1292160660239bc469727b2c31fb6035, type: 3}
   m_Name: SummonCapturedPawn
   m_EditorClassIdentifier: Assembly-CSharp::CardData
-  cardName: SummonCapturedPawn
+  cardName: Summon Captured Pawn
   cardArtwork: {fileID: -2790212338442432957, guid: 199c66ad10ec186429dbe992931e9dff, type: 3}
+  cardRole: 0
   effectType: 11
-  requiredTargetName: 
+  requiredTargetName: King
   baseCooldown: 0
   maxUses: 1
   effectValue1: 0

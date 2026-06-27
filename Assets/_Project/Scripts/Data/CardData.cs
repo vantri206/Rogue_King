@@ -8,6 +8,10 @@ public class CardData : ScriptableObject
 
     public Sprite cardArtwork;
 
+    [Header("Card Role")]
+    [Tooltip("RogueKing card chỉ được đưa vào deck/và sử dụng khi player đang cầm Rogue King. ChessAlliance card chỉ dùng khi player đang cầm phe Chess Alliance.")]
+    public CardRoleType cardRole = CardRoleType.RogueKing;
+
     public CardEffectType effectType;
 
     [Tooltip("Để trống nếu card không cần target. Nếu card cần target là Vua, gõ 'King'.")]

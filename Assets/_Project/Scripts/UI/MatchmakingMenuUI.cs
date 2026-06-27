@@ -335,6 +335,20 @@ public class MatchmakingMenuUI : MonoBehaviour
         }
     }
 
+
+    public void NotifyPreMatchCardSelectionOpened()
+    {
+        if (lobbyWaitTimeoutCoroutine != null)
+        {
+            StopCoroutine(lobbyWaitTimeoutCoroutine);
+            lobbyWaitTimeoutCoroutine = null;
+        }
+
+        isMatchmaking = false;
+        SetInteractable(false);
+        SetStatus("Match found. Choose your cards, then press Fight!");
+    }
+
     public void ShowLobbyRoomError(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
