@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Queen
   baseAttack: 1
-  baseHealth: 1
+  baseHealth: 30
   moveType: 0
   maxMoveRange: 20
   pieceSprite: {fileID: -4451292831069405886, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}

@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Bishop
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Bishop
-  baseAttack: 1
-  baseHealth: 1
+  baseAttack: 15
+  baseHealth: 15
   moveType: 0
   maxMoveRange: 20
   pieceSprite: {fileID: 6683977692621577339, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
@@ -26,5 +26,3 @@ MonoBehaviour:
   - {x: -1, y: -1}
   - {x: 1, y: -1}
   equippedWeapon: {fileID: 11400000, guid: 34d5d0d63be7f4f4daa4a23c6795ffd0, type: 2}
-  activeSkill: 2
-  baseSkillCooldown: 0

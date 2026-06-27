@@ -17,8 +17,8 @@ MonoBehaviour:
   cardRole: 1
   effectType: 8
   requiredTargetName: 
-  baseCooldown: 0
+  baseCooldown: 2
   maxUses: 1
   effectValue1: 1
-  effectValue2: 1
+  effectValue2: 5
   summonPieceData: {fileID: 0}
