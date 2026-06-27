@@ -402,13 +402,19 @@ public class ServerGameManager : NetworkBehaviour
         ChangeState(NetGameState.ResolvingAction);
     }
 
-    public void OnKingDefeated()
+    public void OnKingDefeated(ChessFaction defeatedKingFaction)
     {
         if (!HasStateAuthority) return;
         if (currentGameState == NetGameState.GameOver || currentGameState == NetGameState.PhaseTransition) return;
 
-        // King bị hạ => người đang cầm Chess Alliance thắng phase hiện tại.
-        CompleteCurrentPhase(chessPlayer, "king_defeated");
+        if (defeatedKingFaction == ChessFaction.ChessRogue)
+        {
+            CompleteCurrentPhase(chessPlayer, "rogue_king_defeated");
+        }
+        else
+        {
+            CompleteCurrentPhase(kingPlayer, "chess_king_defeated");
+        }
     }
 
     public void OnChessAllianceEliminated()
