@@ -55,6 +55,22 @@ public class PlayerNetworkController : NetworkBehaviour
     [Header("Debug")]
     [SerializeField] private bool debugInputLogs = true;
 
+    [Header("Card/Skill Highlight Preview")]
+    [Tooltip("Bật highlight các ô hợp lệ khi đang chọn mục tiêu cho card/skill.")]
+    [SerializeField] private bool showCardTargetHighlights = true;
+
+    [Tooltip("Màu/state dùng cho ô có thể chọn khi card/skill cần target. ValidMove thường là xanh.")]
+    [SerializeField] private TileState cardSelectableTargetHighlightState = TileState.ValidMove;
+
+    [Tooltip("Bật highlight nhanh các quân sẽ bị/được ảnh hưởng với card không cần target.")]
+    [SerializeField] private bool flashInstantCardAffectedTiles = true;
+
+    [Tooltip("Màu/state dùng để flash các ô bị/được ảnh hưởng bởi card không cần target.")]
+    [SerializeField] private TileState instantCardAffectedHighlightState = TileState.ValidMove;
+
+    [Tooltip("Thời gian giữ highlight preview cho card không cần target, tính bằng giây.")]
+    [SerializeField, Min(0.05f)] private float instantCardAffectedFlashSeconds = 0.45f;
+
     [Header("Multiplayer Flow")]
     [Tooltip("Fallback only: if no MatchResultUI exists in PlayScene, leave PlayScene and return to MenuScene automatically when GameOver is reached.")]
     [SerializeField] private bool autoReturnToMenuOnGameOver = true;
@@ -76,6 +92,10 @@ public class PlayerNetworkController : NetworkBehaviour
     private readonly List<Vector2Int> currentValidMoves = new List<Vector2Int>();
     private readonly List<Vector2Int> currentValidAttacks = new List<Vector2Int>();
     private readonly List<Vector2Int> currentAoETiles = new List<Vector2Int>();
+    private readonly List<Vector2Int> currentCardTargetTiles = new List<Vector2Int>();
+    private readonly List<Vector2Int> currentCardAffectedTiles = new List<Vector2Int>();
+
+    private Coroutine cardAffectedFlashRoutine;
 
     private Vector2Int lockedAttackTarget = new Vector2Int(-1, -1);
     private BoardTile lastHoveredTile;
@@ -89,6 +109,11 @@ public class PlayerNetworkController : NetworkBehaviour
     private NetGameState lastObservedGameState = NetGameState.Init;
     private PlayerRef lastObservedKingPlayer;
     private PlayerRef lastObservedChessPlayer;
+
+    private bool hasInteractionObservedState;
+    private NetGameState lastInteractionObservedState = NetGameState.Init;
+    private PlayerRef lastInteractionObservedKingPlayer;
+    private PlayerRef lastInteractionObservedChessPlayer;
 
     private bool attackRequestPending;
     private float attackRequestPendingStartedTime;
@@ -576,6 +601,7 @@ public class PlayerNetworkController : NetworkBehaviour
         InitializeWeaponUIIfPossible();
         RefreshWeaponCooldownUI();
         UpdateLocalRoleAndTurnUI();
+        CleanupInteractionOnNetworkStateChange();
 
         if (ServerGameManager.Instance != null && ServerGameManager.Instance.currentGameState == NetGameState.GameOver)
         {
@@ -599,6 +625,10 @@ public class PlayerNetworkController : NetworkBehaviour
             case ClientInputState.AimingAttack:
             case ClientInputState.ConfirmingAttack:
                 UpdateAimingHover();
+                break;
+            case ClientInputState.AimingCard:
+                // Card target highlights are generated once when the card starts aiming.
+                // Do not repaint every frame; this avoids stale highlight races.
                 break;
         }
 
@@ -786,6 +816,43 @@ public class PlayerNetworkController : NetworkBehaviour
     }
 
 
+    private void CleanupInteractionOnNetworkStateChange()
+    {
+        if (ServerGameManager.Instance == null)
+            return;
+
+        NetGameState state = ServerGameManager.Instance.currentGameState;
+        PlayerRef king = ServerGameManager.Instance.kingPlayer;
+        PlayerRef chess = ServerGameManager.Instance.chessPlayer;
+
+        bool changed = !hasInteractionObservedState ||
+                       state != lastInteractionObservedState ||
+                       king != lastInteractionObservedKingPlayer ||
+                       chess != lastInteractionObservedChessPlayer;
+
+        if (changed)
+        {
+            hasInteractionObservedState = true;
+            lastInteractionObservedState = state;
+            lastInteractionObservedKingPlayer = king;
+            lastInteractionObservedChessPlayer = chess;
+
+            // A turn/role/phase change is a hard interaction boundary.
+            // This prevents old green/card highlights from surviving forever when the server advances state.
+            if (currentState != ClientInputState.Idle && !CanLocalPlayerActNow())
+            {
+                CancelCurrentInteraction();
+                return;
+            }
+
+            if (currentState == ClientInputState.Idle)
+                ClearAllHighlights();
+        }
+
+        if (currentState != ClientInputState.Idle && !CanLocalPlayerActNow())
+            CancelCurrentInteraction();
+    }
+
     private void UpdateAttackRequestPendingState(NetGameState state)
     {
         if (!attackRequestPending)
@@ -940,6 +1007,13 @@ public class PlayerNetworkController : NetworkBehaviour
 
         if (currentState == ClientInputState.AimingCard)
         {
+            if (!IsPendingCardTargetLocallyAllowed(cellPos))
+            {
+                if (debugInputLogs)
+                    Debug.Log($"[Client Card] Ignored target {cellPos} for card '{pendingCardData?.cardName}': not in highlighted valid target list.");
+                return;
+            }
+
             Debug.Log($"🟨 [Client Input] Đã chỉ định ô {cellPos} cho thẻ '{pendingCardData?.cardName}'. Đang gửi RPC!");
             Rpc_RequestPlayCard(pendingCardSlotIndex, cellPos);
             CancelCurrentInteraction(); // Xài xong thì cất thẻ, quay về Idle
@@ -1525,10 +1599,6 @@ public class PlayerNetworkController : NetworkBehaviour
 
         HidePieceContextUI();
         ClearAllHighlights();
-        ClearHighlightTiles(currentValidAttacks);
-        ClearHighlightTiles(currentAoETiles);
-        currentValidAttacks.Clear();
-        currentAoETiles.Clear();
         lockedAttackTarget = new Vector2Int(-1, -1);
         selectedPiece = null;
 
@@ -1714,16 +1784,31 @@ public class PlayerNetworkController : NetworkBehaviour
 
     private void ClearAllHighlights()
     {
+        StopCardAffectedFlashRoutine();
+
         if (chessBoard != null)
             chessBoard.ResetAllTileHighlights();
 
         currentValidMoves.Clear();
+        currentValidAttacks.Clear();
+        currentAoETiles.Clear();
+        currentCardTargetTiles.Clear();
+        currentCardAffectedTiles.Clear();
 
         if (lastHoveredTile != null)
         {
             lastHoveredTile.ToggleSelection(false);
             lastHoveredTile = null;
         }
+    }
+
+    private void StopCardAffectedFlashRoutine()
+    {
+        if (cardAffectedFlashRoutine == null)
+            return;
+
+        StopCoroutine(cardAffectedFlashRoutine);
+        cardAffectedFlashRoutine = null;
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -2203,13 +2288,240 @@ public class PlayerNetworkController : NetworkBehaviour
             currentState = ClientInputState.AimingCard;
 
             ClearAllHighlights();
-            Debug.Log($"🟨 [Client Input] Đang ngắm thẻ '{data.cardName}'. Hãy CLICK CHỌN 1 Ô TRÊN BÀN CỜ để sử dụng!");
+            BuildAndShowCardTargetHighlights(data);
+
+            Debug.Log($"🟨 [Client Input] Đang ngắm thẻ '{data.cardName}'. Hãy CLICK CHỌN 1 Ô ĐƯỢC HIGHLIGHT TRÊN BÀN CỜ để sử dụng!");
         }
         else
         {
-            Debug.Log($"🟩 [Client Input] Thẻ '{data.cardName}' không cần mục tiêu. Kích hoạt ngay!");
+            Debug.Log($"🟩 [Client Input] Thẻ '{data.cardName}' không cần mục tiêu. Highlight nhanh các quân bị/được ảnh hưởng rồi kích hoạt!");
+            FlashInstantCardAffectedTiles(data);
             Rpc_RequestPlayCard(slotIndex, new Vector2Int(-1, -1));
         }
+    }
+
+    private void BuildAndShowCardTargetHighlights(CardData data)
+    {
+        currentCardTargetTiles.Clear();
+
+        if (!showCardTargetHighlights || data == null || chessBoard == null)
+            return;
+
+        currentCardTargetTiles.AddRange(BuildCardTargetTiles(data));
+        ShowHighlightTiles(currentCardTargetTiles, cardSelectableTargetHighlightState);
+
+        if (debugInputLogs)
+            Debug.Log($"[Client Card] Highlighted {currentCardTargetTiles.Count} valid target tile(s) for card '{data.cardName}'.");
+    }
+
+    private ChessPieceData ResolvePieceData(NetworkChessPiece piece, NetworkPieceSnapshot snapshot)
+    {
+        if (piece == null)
+            return null;
+
+        ChessPieceData pieceData = null;
+
+        try
+        {
+            pieceData = piece.PieceData;
+        }
+        catch (System.InvalidOperationException)
+        {
+            return null;
+        }
+
+        if (pieceData == null && ServerBoardManager.Instance != null)
+            pieceData = ServerBoardManager.Instance.GetPieceDataByIndex(snapshot.PieceDataIndex);
+
+        return pieceData;
+    }
+
+    private List<Vector2Int> BuildCardTargetTiles(CardData data)
+    {
+        List<Vector2Int> result = new List<Vector2Int>();
+        if (data == null)
+            return result;
+
+        ChessFaction myFaction = ResolveLocalCardFaction();
+        if (myFaction == ChessFaction.Neutral)
+            return result;
+
+        if (data.effectType == CardEffectType.SummonCapturedPawn)
+        {
+            AddAllEmptyBoardTiles(result);
+            return result;
+        }
+
+        foreach (NetworkChessPiece piece in FindObjectsByType<NetworkChessPiece>(FindObjectsSortMode.None))
+        {
+            if (!TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot snapshot))
+                continue;
+
+            ChessPieceData pieceData = ResolvePieceData(piece, snapshot);
+            if (pieceData == null)
+                continue;
+
+            bool isFriendly = snapshot.Faction == myFaction;
+            bool isEnemy = snapshot.Faction != myFaction && snapshot.Faction != ChessFaction.Neutral;
+            string pieceName = pieceData.pieceName ?? string.Empty;
+
+            bool allowed = false;
+
+            switch (data.effectType)
+            {
+                case CardEffectType.SuperBuff:
+                case CardEffectType.Recall:
+                    allowed = isFriendly;
+                    break;
+
+                case CardEffectType.PawnShield:
+                    allowed = isFriendly && pieceName.Contains("Pawn");
+                    break;
+
+                case CardEffectType.KingDash:
+                case CardEffectType.KingSweep:
+                    allowed = isFriendly && pieceName.Contains("King");
+                    break;
+
+                default:
+                    if (!string.IsNullOrEmpty(data.requiredTargetName))
+                        allowed = isFriendly && pieceName.Contains(data.requiredTargetName);
+                    break;
+            }
+
+            if (allowed && !result.Contains(snapshot.GridPos))
+                result.Add(snapshot.GridPos);
+        }
+
+        return result;
+    }
+
+    private void FlashInstantCardAffectedTiles(CardData data)
+    {
+        if (!flashInstantCardAffectedTiles || data == null || chessBoard == null)
+            return;
+
+        StopCardAffectedFlashRoutine();
+
+        currentCardAffectedTiles.Clear();
+        currentCardAffectedTiles.AddRange(BuildInstantCardAffectedTiles(data));
+
+        if (currentCardAffectedTiles.Count == 0)
+            return;
+
+        ShowHighlightTiles(currentCardAffectedTiles, instantCardAffectedHighlightState);
+        cardAffectedFlashRoutine = StartCoroutine(CardAffectedFlashRoutine());
+
+        if (debugInputLogs)
+            Debug.Log($"[Client Card] Flash highlighted {currentCardAffectedTiles.Count} affected tile(s) for instant card '{data.cardName}'.");
+    }
+
+    private System.Collections.IEnumerator CardAffectedFlashRoutine()
+    {
+        float delay = Mathf.Max(0.05f, instantCardAffectedFlashSeconds);
+        yield return new WaitForSeconds(delay);
+
+        ClearHighlightTiles(currentCardAffectedTiles);
+        cardAffectedFlashRoutine = null;
+    }
+
+    private List<Vector2Int> BuildInstantCardAffectedTiles(CardData data)
+    {
+        List<Vector2Int> result = new List<Vector2Int>();
+        if (data == null)
+            return result;
+
+        ChessFaction myFaction = ResolveLocalCardFaction();
+        if (myFaction == ChessFaction.Neutral)
+            return result;
+
+        ChessFaction enemyFaction = myFaction == ChessFaction.ChessRogue ? ChessFaction.ChessAlliance : ChessFaction.ChessRogue;
+
+        foreach (NetworkChessPiece piece in FindObjectsByType<NetworkChessPiece>(FindObjectsSortMode.None))
+        {
+            if (!TryGetNetworkPieceSnapshot(piece, out NetworkPieceSnapshot snapshot))
+                continue;
+
+            ChessPieceData pieceData = ResolvePieceData(piece, snapshot);
+            if (pieceData == null)
+                continue;
+
+            string pieceName = pieceData.pieceName ?? string.Empty;
+            bool affected = false;
+
+            switch (data.effectType)
+            {
+                case CardEffectType.BishopSilence:
+                    affected = snapshot.Faction == enemyFaction && pieceName.Contains("King");
+                    break;
+
+                case CardEffectType.March:
+                case CardEffectType.PawnForwardAttack:
+                    affected = snapshot.Faction == myFaction && pieceName.Contains("Pawn");
+                    break;
+
+                case CardEffectType.ExtraTurn:
+                    affected = snapshot.Faction == myFaction && pieceName.Contains("King");
+                    break;
+
+                case CardEffectType.KingRevive:
+                    // Revive affects a graveyard piece, not a current board piece.
+                    // There is no visible board target to preview safely.
+                    affected = false;
+                    break;
+            }
+
+            if (affected && !result.Contains(snapshot.GridPos))
+                result.Add(snapshot.GridPos);
+        }
+
+        return result;
+    }
+
+    private void AddAllEmptyBoardTiles(List<Vector2Int> result)
+    {
+        if (result == null || chessBoard == null)
+            return;
+
+        BoardData previewBoard = BuildClientPreviewBoard(out _);
+        if (previewBoard == null)
+            return;
+
+        for (int x = 0; x < previewBoard.width; x++)
+        {
+            for (int y = 0; y < previewBoard.height; y++)
+            {
+                if (previewBoard.IsTileEmptyForMovement(x, y))
+                    result.Add(new Vector2Int(x, y));
+            }
+        }
+    }
+
+    private bool IsPendingCardTargetLocallyAllowed(Vector2Int cellPos)
+    {
+        if (pendingCardData == null)
+            return false;
+
+        // If no highlight list was built, allow the click and let the server be authoritative.
+        // This keeps compatibility if a future card needs an unusual target.
+        if (currentCardTargetTiles.Count == 0)
+            return true;
+
+        return currentCardTargetTiles.Contains(cellPos);
+    }
+
+    private ChessFaction ResolveLocalCardFaction()
+    {
+        if (ServerGameManager.Instance == null)
+            return ChessFaction.Neutral;
+
+        if (ServerGameManager.Instance.IsKingPlayer(Object.InputAuthority))
+            return ChessFaction.ChessRogue;
+
+        if (ServerGameManager.Instance.IsChessPlayer(Object.InputAuthority))
+            return ChessFaction.ChessAlliance;
+
+        return ChessFaction.Neutral;
     }
 
     private static bool DoesCardNeedBoardTargetFallback(CardData data)

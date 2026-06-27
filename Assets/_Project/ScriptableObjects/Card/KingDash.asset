@@ -19,6 +19,6 @@ MonoBehaviour:
   requiredTargetName: King
   baseCooldown: 1
   maxUses: 1
-  effectValue1: 3
+  effectValue1: 5
   effectValue2: 0
   summonPieceData: {fileID: 0}
