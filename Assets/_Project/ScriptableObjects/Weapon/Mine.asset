@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: MINE
   weaponIcon: {fileID: 6701434673270998501, guid: 2291519ecf1c4bb4981e8f5178be708b, type: 3}
-  baseDamage: 1
+  baseDamage: 30
   defaultEffectType: 0
   isDirectional: 1
   isOriginRelative: 0

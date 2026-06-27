@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: King
   baseAttack: 1
-  baseHealth: 1
+  baseHealth: 100
   moveType: 0
   maxMoveRange: 1
   pieceSprite: {fileID: 5492441540918046611, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
@@ -30,5 +30,3 @@ MonoBehaviour:
   - {x: 0, y: -1}
   - {x: 1, y: -1}
   equippedWeapon: {fileID: 11400000, guid: 34d5d0d63be7f4f4daa4a23c6795ffd0, type: 2}
-  activeSkill: 3
-  baseSkillCooldown: 0

@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: SNIPER
   weaponIcon: {fileID: 1767080452679767575, guid: cafc9d3966e76434894c35c52f68de6a, type: 3}
-  baseDamage: 1
+  baseDamage: 15
   defaultEffectType: 0
   isDirectional: 1
   isOriginRelative: 0
@@ -46,38 +46,26 @@ MonoBehaviour:
   specialType: 0
   hiddenMineRequireEmptyTarget: 1
   hiddenMineDamage: 0
-  hiddenMineAoERange: 1
+  hiddenMineAOERange: 1
   hiddenMineExplosionPrefab: {fileID: 0}
   hiddenMineExplosionSfx: {fileID: 0}
   targetingPattern:
-  - {x: 1, y: 0}
   - {x: 2, y: 0}
   - {x: 3, y: 0}
-  - {x: 6, y: 0}
-  - {x: 7, y: 0}
-  - {x: 4, y: 0}
-  - {x: 5, y: 0}
   - {x: 0, y: 1}
   - {x: 0, y: 2}
   - {x: 0, y: 3}
   - {x: 0, y: 4}
-  - {x: 0, y: 5}
-  - {x: 0, y: 6}
-  - {x: 0, y: 7}
   - {x: -1, y: 0}
   - {x: -3, y: 0}
   - {x: -2, y: 0}
-  - {x: -5, y: 0}
-  - {x: -7, y: 0}
-  - {x: -4, y: 0}
-  - {x: -6, y: 0}
   - {x: 0, y: -1}
   - {x: 0, y: -2}
   - {x: 0, y: -3}
+  - {x: 1, y: 0}
+  - {x: 4, y: 0}
   - {x: 0, y: -4}
-  - {x: 0, y: -5}
-  - {x: 0, y: -6}
-  - {x: 0, y: -7}
+  - {x: -4, y: 0}
   effectPattern:
   - {x: 0, y: 0}
   gunPrefab: {fileID: 8650001892109445979, guid: 6e9c7b975db32944498d27a2bb268ff5, type: 3}
