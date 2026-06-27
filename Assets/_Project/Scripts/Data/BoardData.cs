@@ -96,7 +96,7 @@ public class BoardData
 
         if (pieceRuntime.baseData.pieceName.Contains("Pawn"))
         {
-            int forwardDir = (pieceRuntime.faction == ChessFaction.ChessAlliance) ? -1 : 1;
+            int forwardDir = (pieceRuntime.faction == ChessFaction.ChessAlliance) ? 1 : -1;
 
             for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
             {
