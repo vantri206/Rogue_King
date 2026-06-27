@@ -158,11 +158,7 @@ public class MatchmakingMenuUI : MonoBehaviour
 
     public void CancelLobbySearchFromMenu(string statusMessage = "Đã hủy tìm trận.")
     {
-        if (lobbyWaitTimeoutCoroutine != null)
-        {
-            StopCoroutine(lobbyWaitTimeoutCoroutine);
-            lobbyWaitTimeoutCoroutine = null;
-        }
+        StopLobbyWaitTimeout();
 
         ResolveRunnerHandler();
         if (runnerHandler != null)
@@ -255,6 +251,7 @@ public class MatchmakingMenuUI : MonoBehaviour
             return;
         }
 
+        StopLobbyWaitTimeout();
         isMatchmaking = true;
         SetInteractable(false);
 
@@ -294,6 +291,7 @@ public class MatchmakingMenuUI : MonoBehaviour
             return;
         }
 
+        StopLobbyWaitTimeout();
         isMatchmaking = true;
         SetInteractable(false);
 
@@ -333,6 +331,7 @@ public class MatchmakingMenuUI : MonoBehaviour
             return;
         }
 
+        StopLobbyWaitTimeout();
         roomCode = SanitizeRoomCode(roomCode);
         if (string.IsNullOrWhiteSpace(roomCode))
         {
@@ -372,11 +371,7 @@ public class MatchmakingMenuUI : MonoBehaviour
 
     public void NotifyPreMatchCardSelectionOpened()
     {
-        if (lobbyWaitTimeoutCoroutine != null)
-        {
-            StopCoroutine(lobbyWaitTimeoutCoroutine);
-            lobbyWaitTimeoutCoroutine = null;
-        }
+        StopLobbyWaitTimeout();
 
         isMatchmaking = false;
         SetInteractable(false);
@@ -392,23 +387,24 @@ public class MatchmakingMenuUI : MonoBehaviour
         SetInteractable(true);
         isMatchmaking = false;
 
-        if (lobbyWaitTimeoutCoroutine != null)
-        {
-            StopCoroutine(lobbyWaitTimeoutCoroutine);
-            lobbyWaitTimeoutCoroutine = null;
-        }
+        StopLobbyWaitTimeout();
     }
 
     private void StartLobbyWaitTimeout()
+    {
+        StopLobbyWaitTimeout();
+
+        float timeout = Mathf.Max(5f, lobbyMatchmakingTimeoutSeconds);
+        lobbyWaitTimeoutCoroutine = StartCoroutine(LobbyWaitTimeoutRoutine(timeout));
+    }
+
+    private void StopLobbyWaitTimeout()
     {
         if (lobbyWaitTimeoutCoroutine != null)
         {
             StopCoroutine(lobbyWaitTimeoutCoroutine);
             lobbyWaitTimeoutCoroutine = null;
         }
-
-        float timeout = Mathf.Max(5f, lobbyMatchmakingTimeoutSeconds);
-        lobbyWaitTimeoutCoroutine = StartCoroutine(LobbyWaitTimeoutRoutine(timeout));
     }
 
     private System.Collections.IEnumerator LobbyWaitTimeoutRoutine(float timeoutSeconds)
@@ -425,7 +421,11 @@ public class MatchmakingMenuUI : MonoBehaviour
         // If we are still in lobby after the timeout, the ready request did not form a pair.
         if (runnerHandler != null && runnerHandler.IsClientConnectedToLobby)
         {
-            SetStatus("Still in lobby. Make sure BOTH clients are connected to RogueKingLobby and both pressed Find Match. Check lobby server log: Ready should become 2/2.");
+            // Important: if a client times out visually but remains in the lobby ready queue,
+            // the next Play click can look stuck because the server still has stale intent.
+            // Cancel on server first, then let the player press Play again cleanly.
+            runnerHandler.ClientCancelLobbyMatchmaking();
+            SetStatus("Không ghép được trận trong thời gian chờ. Đã hủy request cũ, hãy bấm Play lại ở cả 2 client.");
             SetInteractable(true);
             isMatchmaking = false;
         }
