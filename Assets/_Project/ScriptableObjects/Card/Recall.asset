@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: Recall
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Recall
-  cardArtwork: {fileID: 913314834325009863, guid: 05f4fa2b656b405449d8704d826243d4, type: 3}
+  cardArtwork: {fileID: -4045150585266316378, guid: 7fd964c4461a0df488177bc9d9c1ed04, type: 3}
   cardRole: 1
   effectType: 10
   requiredTargetName: 
-  baseCooldown: 2
-  maxUses: 2
-  effectValue1: 5
-  effectValue2: 10
+  baseCooldown: 0
+  maxUses: 1
+  effectValue1: 0
+  effectValue2: 0
   summonPieceData: {fileID: 0}

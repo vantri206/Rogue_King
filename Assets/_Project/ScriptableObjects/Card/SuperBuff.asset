@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: SuperBuff
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Super Buff
-  cardArtwork: {fileID: 913314834325009863, guid: 05f4fa2b656b405449d8704d826243d4, type: 3}
+  cardArtwork: {fileID: 7759559523558174242, guid: 0703d5fb5ddc2014f91a43cdef9f2977, type: 3}
   cardRole: 1
   effectType: 6
   requiredTargetName: 
   baseCooldown: 2
   maxUses: 2
-  effectValue1: 5
-  effectValue2: 10
+  effectValue1: 1
+  effectValue2: 1
   summonPieceData: {fileID: 0}

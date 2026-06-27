@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: KingSweep
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: King Sweep
-  cardArtwork: {fileID: 913314834325009863, guid: 05f4fa2b656b405449d8704d826243d4, type: 3}
+  cardArtwork: {fileID: -2832088003302323534, guid: b3b16007e5d72774c8d81c08dc785c50, type: 3}
   cardRole: 0
   effectType: 4
   requiredTargetName: King
-  baseCooldown: 2
-  maxUses: 2
-  effectValue1: 5
-  effectValue2: 10
+  baseCooldown: 1
+  maxUses: 1
+  effectValue1: 1
+  effectValue2: 0
   summonPieceData: {fileID: 0}

@@ -17,7 +17,7 @@ MonoBehaviour:
   cardRole: 0
   effectType: 7
   requiredTargetName: King
-  baseCooldown: 3
+  baseCooldown: 0
   maxUses: 1
   effectValue1: 0
   effectValue2: 0

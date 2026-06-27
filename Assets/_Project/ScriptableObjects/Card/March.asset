@@ -19,6 +19,6 @@ MonoBehaviour:
   requiredTargetName: 
   baseCooldown: 0
   maxUses: 1
-  effectValue1: 2
-  effectValue2: 100
+  effectValue1: 1
+  effectValue2: 1
   summonPieceData: {fileID: 0}
