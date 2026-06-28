@@ -79,6 +79,7 @@ public class BoardData
             if (entity is ChessPieceRuntime runtime)
             {
                 runtime.previousGridPosition = runtime.currentGridPosition;
+                runtime.hasMoved = true;
             }
 
             RemoveEntity(entity);
@@ -96,63 +97,75 @@ public class BoardData
 
         if (pieceRuntime.baseData.pieceName.Contains("Pawn"))
         {
-            int forwardDir = (pieceRuntime.faction == ChessFaction.ChessAlliance) ? 1 : -1;
-
-            for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
+            // ==================================================
+            // 1. LOGIC ĐẶC BIỆT DÀNH RIÊNG CHO QUÂN TỐT (PAWN) - BÀN CỜ NGANG
+            // ==================================================
+            if (pieceRuntime.baseData.pieceName.Contains("Pawn"))
             {
-                Vector2Int forwardMove = new Vector2Int(currentPos.x, currentPos.y + (forwardDir * i));
+                // Xác định hướng tiến theo trục X (Ngang).
+                // Giả sử: ChessAlliance ở bên Trái (X tăng dần -> 1). Rogue ở bên Phải (X giảm dần -> -1).
+                // NẾU VÀO GAME THẤY TỐT ĐI LÙI, BẠN CHỈ CẦN ĐẢO NGƯỢC SỐ 1 VÀ -1 Ở DÒNG DƯỚI ĐÂY NHÉ:
+                int forwardDir = (pieceRuntime.faction == ChessFaction.ChessAlliance) ? 1 : -1;
 
-                if (!IsValidPosition(forwardMove.x, forwardMove.y)) break;
+                // --- A. ĐI THẲNG (Theo Trục X) ---
+                for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
+                {
+                    // CỘNG forwardDir VÀO TRỤC X
+                    Vector2Int forwardMove = new Vector2Int(currentPos.x + (forwardDir * i), currentPos.y);
 
-                if (IsTileEmptyForMovement(forwardMove.x, forwardMove.y))
-                {
-                    validMoves.Add(forwardMove);
-                }
-                else
-                {
-                    if (i == 1 && pieceRuntime.canAttackStraight)
+                    if (!IsValidPosition(forwardMove.x, forwardMove.y)) break;
+
+                    // Nếu ô trống -> Cho đi tiếp
+                    if (IsTileEmptyForMovement(forwardMove.x, forwardMove.y))
                     {
-                        var targetStraight = GetEntityAt<ChessPieceRuntime>(forwardMove.x, forwardMove.y);
-                        if (targetStraight != null && targetStraight.faction != pieceRuntime.faction)
-                        {
-                            validMoves.Add(forwardMove); 
-                        }
+                        validMoves.Add(forwardMove);
                     }
-                    break; 
+                    else
+                    {
+                        // Gặp vật cản. NẾU đang có thẻ bài "Ăn Thẳng" và cản ở ngay trước mặt (i=1)
+                        if (i == 1 && pieceRuntime.canAttackStraight)
+                        {
+                            var targetStraight = GetEntityAt<ChessPieceRuntime>(forwardMove.x, forwardMove.y);
+                            if (targetStraight != null && targetStraight.faction != pieceRuntime.faction)
+                            {
+                                validMoves.Add(forwardMove); // Cho phép chém thẳng
+                            }
+                        }
+                        break; // Bị chặn thì dừng tiến lên
+                    }
                 }
-            }
 
-            if (!pieceRuntime.hasMoved)
-            {
-                Vector2Int forward1 = new Vector2Int(currentPos.x, currentPos.y + forwardDir);
-                Vector2Int forward2 = new Vector2Int(currentPos.x, currentPos.y + (forwardDir * 2));
-
-                if (IsValidPosition(forward1.x, forward1.y) && IsTileEmptyForMovement(forward1.x, forward1.y) &&
-                    IsValidPosition(forward2.x, forward2.y) && IsTileEmptyForMovement(forward2.x, forward2.y))
+                // --- B. NƯỚC ĐẦU TIÊN NHẢY 2 Ô (Theo Trục X) ---
+                if (!pieceRuntime.hasMoved)
                 {
-                    if (!validMoves.Contains(forward2)) validMoves.Add(forward2);
+                    Vector2Int forward1 = new Vector2Int(currentPos.x + forwardDir, currentPos.y);
+                    Vector2Int forward2 = new Vector2Int(currentPos.x + (forwardDir * 2), currentPos.y);
+
+                    if (IsValidPosition(forward1.x, forward1.y) && IsTileEmptyForMovement(forward1.x, forward1.y) &&
+                        IsValidPosition(forward2.x, forward2.y) && IsTileEmptyForMovement(forward2.x, forward2.y))
+                    {
+                        if (!validMoves.Contains(forward2)) validMoves.Add(forward2);
+                    }
                 }
-            }
 
-            Vector2Int diagLeft = new Vector2Int(currentPos.x - 1, currentPos.y + forwardDir);
-            Vector2Int diagRight = new Vector2Int(currentPos.x + 1, currentPos.y + forwardDir);
+                // --- C. ĂN CHÉO (Tiến lên theo X, Chéo lên/xuống theo Y) ---
+                Vector2Int diagUp = new Vector2Int(currentPos.x + forwardDir, currentPos.y + 1);
+                Vector2Int diagDown = new Vector2Int(currentPos.x + forwardDir, currentPos.y - 1);
 
-            // Kiểm tra chéo Trái
-            if (IsValidPosition(diagLeft.x, diagLeft.y))
-            {
-                var targetLeft = GetEntityAt<ChessPieceRuntime>(diagLeft.x, diagLeft.y);
-                if (targetLeft != null && targetLeft.faction != pieceRuntime.faction)
+                // Kiểm tra chéo lên trên
+                if (IsValidPosition(diagUp.x, diagUp.y))
                 {
-                    validMoves.Add(diagLeft);
+                    var targetUp = GetEntityAt<ChessPieceRuntime>(diagUp.x, diagUp.y);
+                    if (targetUp != null && targetUp.faction != pieceRuntime.faction)
+                        validMoves.Add(diagUp);
                 }
-            }
 
-            if (IsValidPosition(diagRight.x, diagRight.y))
-            {
-                var targetRight = GetEntityAt<ChessPieceRuntime>(diagRight.x, diagRight.y);
-                if (targetRight != null && targetRight.faction != pieceRuntime.faction)
+                // Kiểm tra chéo xuống dưới
+                if (IsValidPosition(diagDown.x, diagDown.y))
                 {
-                    validMoves.Add(diagRight);
+                    var targetDown = GetEntityAt<ChessPieceRuntime>(diagDown.x, diagDown.y);
+                    if (targetDown != null && targetDown.faction != pieceRuntime.faction)
+                        validMoves.Add(diagDown);
                 }
             }
         }
