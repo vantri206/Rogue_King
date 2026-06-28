@@ -25,6 +25,12 @@ public class ChessPieceRuntime : GridEntity
     public bool isSuperBuffed;
     public bool hasMoved;
 
+    // SuperBuff mới cho Rogue King:
+    // effectValue1 = hệ số nhân sát thương/attack hiển thị, ví dụ 2 nghĩa là x2.
+    // effectValue2 = số lượt KingTurn còn hiệu lực.
+    public int kingDamageMultiplier;
+    public int kingDamageBuffTurnsLeft;
+
     public ChessPieceRuntime(ChessPieceData data, Vector2Int startPos, ChessFaction assignedFaction)
         : base(startPos, assignedFaction)
     {
@@ -47,6 +53,8 @@ public class ChessPieceRuntime : GridEntity
         canAttackStraight = false;
         isSuperBuffed = false;
         hasMoved = false;
+        kingDamageMultiplier = 1;
+        kingDamageBuffTurnsLeft = 0;
     }
 
     public override bool IsBlockingMovement() => true;

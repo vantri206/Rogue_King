@@ -133,7 +133,12 @@ public class ServerBoardManager : NetworkBehaviour
         );
 
         runtime.currentHealth = setup.pieceData.baseHealth;
+        runtime.currentAttack = setup.pieceData.baseAttack;
+        runtime.kingDamageMultiplier = 1;
+        runtime.kingDamageBuffTurnsLeft = 0;
         runtime.silencedTurnsLeft = 0;
+
+        SyncNetworkPieceFromRuntime(piece, runtime);
 
         logicBoard.AddEntity(runtime, setup.startPosition.x, setup.startPosition.y);
     }
@@ -213,7 +218,13 @@ public class ServerBoardManager : NetworkBehaviour
 
         ChessPieceRuntime runtime = new ChessPieceRuntime(pieceData, spawnPos, faction);
         runtime.currentHealth = pieceData.baseHealth;
+        runtime.currentAttack = pieceData.baseAttack;
+        runtime.kingDamageMultiplier = 1;
+        runtime.kingDamageBuffTurnsLeft = 0;
         runtime.silencedTurnsLeft = 0;
+
+        SyncNetworkPieceFromRuntime(piece, runtime);
+
         logicBoard.AddEntity(runtime, spawnPos.x, spawnPos.y);
 
         Debug.Log($"[ServerBoardManager] Spawned runtime piece '{pieceData.pieceName}' as {faction} at {spawnPos}.");
@@ -307,6 +318,7 @@ public class ServerBoardManager : NetworkBehaviour
         boardState[toPos] = piece;
 
         piece.currentGridPos = toPos;
+        piece.hasMoved = true;
 
         ChessPieceRuntime runtime = movingRuntimeBeforeMove != null
             ? movingRuntimeBeforeMove
@@ -389,9 +401,66 @@ public class ServerBoardManager : NetworkBehaviour
         if (runtime == null) return;
 
         runtime.currentHealth = piece.currentHp;
+        runtime.currentAttack = piece.currentAttack > 0 ? piece.currentAttack : (runtime.baseData != null ? runtime.baseData.baseAttack : runtime.currentAttack);
         runtime.currentSkillCooldown = piece.currentSkillCooldown;
         runtime.silencedTurnsLeft = piece.silencedTurnsLeft;
+        runtime.hasMoved = piece.hasMoved;
+        runtime.kingDamageMultiplier = Mathf.Max(1, piece.kingDamageMultiplier);
+        runtime.kingDamageBuffTurnsLeft = Mathf.Max(0, piece.kingDamageBuffTurnsLeft);
         runtime.faction = piece.faction;
+    }
+
+    public void SyncNetworkPieceFromRuntime(NetworkChessPiece piece, ChessPieceRuntime runtime)
+    {
+        if (!HasStateAuthority || piece == null || runtime == null) return;
+
+        piece.currentHp = Mathf.Max(0, runtime.currentHealth);
+        piece.currentAttack = Mathf.Max(0, runtime.currentAttack);
+        piece.currentSkillCooldown = Mathf.Max(0, runtime.currentSkillCooldown);
+        piece.silencedTurnsLeft = Mathf.Max(0, runtime.silencedTurnsLeft);
+        piece.hasMoved = runtime.hasMoved;
+        piece.kingDamageMultiplier = Mathf.Max(1, runtime.kingDamageMultiplier);
+        piece.kingDamageBuffTurnsLeft = Mathf.Max(0, runtime.kingDamageBuffTurnsLeft);
+        piece.faction = runtime.faction;
+    }
+
+    public void TickKingDamageBuffs(ChessFaction faction)
+    {
+        if (!HasStateAuthority || logicBoard == null) return;
+
+        foreach (var kvp in boardState)
+        {
+            NetworkChessPiece piece = kvp.Value;
+            if (piece == null || piece.faction != faction)
+                continue;
+
+            ChessPieceRuntime runtime = GetRuntimeAt(piece.currentGridPos);
+            if (runtime == null || runtime.baseData == null)
+                continue;
+
+            string pieceName = runtime.baseData.pieceName ?? string.Empty;
+            if (!pieceName.Contains("King"))
+                continue;
+
+            if (runtime.kingDamageBuffTurnsLeft > 0)
+                runtime.kingDamageBuffTurnsLeft--;
+
+            if (runtime.kingDamageBuffTurnsLeft <= 0)
+            {
+                runtime.kingDamageBuffTurnsLeft = 0;
+                runtime.kingDamageMultiplier = 1;
+                runtime.currentAttack = runtime.baseData.baseAttack;
+                runtime.isSuperBuffed = false;
+            }
+            else
+            {
+                runtime.kingDamageMultiplier = Mathf.Max(1, runtime.kingDamageMultiplier);
+                runtime.currentAttack = runtime.baseData.baseAttack * runtime.kingDamageMultiplier;
+            }
+
+            SyncNetworkPieceFromRuntime(piece, runtime);
+            Debug.Log($"[ServerBoardManager] King damage buff tick. Piece={pieceName}, Faction={faction}, Multiplier=x{runtime.kingDamageMultiplier}, TurnsLeft={runtime.kingDamageBuffTurnsLeft}, RuntimeAttack={runtime.currentAttack}");
+        }
     }
 
     public void TickTurnTimers(ChessFaction nextTurnFaction)
@@ -412,6 +481,25 @@ public class ServerBoardManager : NetworkBehaviour
 
                 SyncRuntimeFromNetworkPiece(piece);
             }
+        }
+    }
+
+    public void ClearPawnForwardAttackBuffs(ChessFaction faction)
+    {
+        if (!HasStateAuthority || logicBoard == null) return;
+
+        foreach (var kvp in boardState)
+        {
+            NetworkChessPiece piece = kvp.Value;
+            if (piece == null || piece.faction != faction)
+                continue;
+
+            ChessPieceRuntime runtime = GetRuntimeAt(piece.currentGridPos);
+            if (runtime == null || runtime.baseData == null || string.IsNullOrEmpty(runtime.baseData.pieceName))
+                continue;
+
+            if (runtime.baseData.pieceName.Contains("Pawn"))
+                runtime.canAttackStraight = false;
         }
     }
 

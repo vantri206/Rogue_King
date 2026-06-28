@@ -7,8 +7,17 @@ public class NetworkChessPiece : NetworkBehaviour
     [Networked, OnChangedRender(nameof(OnPositionChanged))]
     public Vector2Int currentGridPos { get; set; }
 
-    [Networked, OnChangedRender(nameof(OnHpChanged))]
+    [Networked, OnChangedRender(nameof(OnStatsChanged))]
     public int currentHp { get; set; }
+
+    [Networked, OnChangedRender(nameof(OnStatsChanged))]
+    public int currentAttack { get; set; }
+
+    [Networked, OnChangedRender(nameof(OnStatsChanged))]
+    public int kingDamageMultiplier { get; set; }
+
+    [Networked, OnChangedRender(nameof(OnStatsChanged))]
+    public int kingDamageBuffTurnsLeft { get; set; }
 
     [Networked, OnChangedRender(nameof(OnVisualDataChanged))]
     public int pieceDataIndex { get; set; }
@@ -19,6 +28,7 @@ public class NetworkChessPiece : NetworkBehaviour
     [Networked] public int currentSkillCooldown { get; set; }
     [Networked] public int silencedTurnsLeft { get; set; }
     [Networked] public NetworkBool isKing { get; set; }
+    [Networked] public NetworkBool hasMoved { get; set; }
 
     [Header("Visual References")]
     [SerializeField] private SpriteRenderer spriteRenderer;
@@ -68,8 +78,12 @@ public class NetworkChessPiece : NetworkBehaviour
         currentGridPos = setup.startPosition;
         faction = setup.faction;
         currentHp = setup.pieceData != null ? setup.pieceData.baseHealth : 1;
+        currentAttack = setup.pieceData != null ? setup.pieceData.baseAttack : 0;
+        kingDamageMultiplier = 1;
+        kingDamageBuffTurnsLeft = 0;
         silencedTurnsLeft = 0;
         isKing = setup.pieceData != null && setup.pieceData.pieceName.Contains("King");
+        hasMoved = false;
     }
 
     public void TakeDamage(int damageAmount)
@@ -114,12 +128,18 @@ public class NetworkChessPiece : NetworkBehaviour
         transform.DOMove(newWorldPos, moveDuration).SetEase(Ease.OutQuad);
     }
 
-    private void OnHpChanged()
+    private void OnStatsChanged()
     {
         // Client-side UI refresh only. Server gameplay logic must not run here.
         PieceContextUI contextUI = FindFirstObjectByType<PieceContextUI>(FindObjectsInactive.Include);
         if (contextUI != null)
             contextUI.RefreshIfShowing(this);
+    }
+
+    // Kept for compatibility with older serialized/generated callback references.
+    private void OnHpChanged()
+    {
+        OnStatsChanged();
     }
 
     private void OnVisualDataChanged()

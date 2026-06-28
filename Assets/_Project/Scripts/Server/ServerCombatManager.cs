@@ -192,7 +192,7 @@ public class ServerCombatManager : NetworkBehaviour
                 GridPos = targetPos,
                 Owner = owner,
                 WeaponIndex = weaponIndex,
-                Damage = ResolveHiddenMineDamage(usedWeapon),
+                Damage = ApplyKingDamageBuffMultiplier(ResolveHiddenMineDamage(usedWeapon), owner),
                 AoERange = Mathf.Max(0, usedWeapon.hiddenMineAOERange)
             });
 
@@ -265,10 +265,16 @@ public class ServerCombatManager : NetworkBehaviour
             if (totalDamage <= 0)
                 continue;
 
+            int baseDamageBeforeKingBuff = totalDamage;
+            totalDamage = ApplyKingDamageBuffMultiplier(totalDamage, attackerPlayer);
+
             Rpc_PlayPieceDamageVFX(pos, weaponIndex);
             killedKing = ApplyDamage(targetPiece, totalDamage, attackerPlayer);
 
             string weaponName = usedWeapon != null ? usedWeapon.weaponName : "UnknownWeapon";
+            if (totalDamage != baseDamageBeforeKingBuff)
+                Debug.Log($"[Server Combat] King damage buff applied. BaseDamage={baseDamageBeforeKingBuff}, FinalDamage={totalDamage}.");
+
             Debug.Log($"[Server Combat] Target at {pos} took {totalDamage} damage from weapon {weaponName} after VFX resolved. Piece damage/destroyed VFX spawned.");
 
             if (killedKing || ServerGameManager.Instance == null || ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
@@ -534,6 +540,38 @@ public class ServerCombatManager : NetworkBehaviour
         }
 
         return null;
+    }
+
+    private int ApplyKingDamageBuffMultiplier(int baseDamage, PlayerRef attackerPlayer)
+    {
+        int safeBaseDamage = Mathf.Max(0, baseDamage);
+        int multiplier = ResolveKingDamageBuffMultiplier(attackerPlayer);
+        if (multiplier <= 1)
+            return safeBaseDamage;
+
+        return Mathf.Max(1, safeBaseDamage * multiplier);
+    }
+
+    private int ResolveKingDamageBuffMultiplier(PlayerRef attackerPlayer)
+    {
+        if (ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
+            return 1;
+
+        if (!ServerGameManager.Instance.IsKingPlayer(attackerPlayer))
+            return 1;
+
+        NetworkChessPiece kingPiece = FindRogueKingPiece();
+        if (kingPiece == null)
+            return 1;
+
+        ChessPieceRuntime runtime = ServerBoardManager.Instance.GetRuntimeAt(kingPiece.currentGridPos);
+        if (runtime == null)
+            return 1;
+
+        if (runtime.kingDamageBuffTurnsLeft <= 0 || runtime.kingDamageMultiplier <= 1)
+            return 1;
+
+        return Mathf.Max(1, runtime.kingDamageMultiplier);
     }
 
     /// <summary>

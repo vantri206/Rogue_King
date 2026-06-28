@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: Rogue King
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Rogue King
-  baseAttack: 1
-  baseHealth: 100
+  baseAttack: 30
+  baseHealth: 10
   moveType: 0
   maxMoveRange: 1
+  pawnForwardDirection: {x: 1, y: 0}
+  mirrorPawnForwardForRogueFaction: 0
   pieceSprite: {fileID: 2198893732444582057, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
   pieceAnimator: {fileID: 22100000, guid: fe668d9f5b19b974b8b236a0f6faeaca, type: 2}
   movePatternGrid: 00000000000001010100000100010000010101000000000000

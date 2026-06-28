@@ -140,7 +140,8 @@ public class PieceContextUI : MonoBehaviour
         try
         {
             ChessPieceData data = piece.PieceData;
-            int attack = data != null ? data.baseAttack : 0;
+            int baseAttack = data != null ? data.baseAttack : 0;
+            int attack = piece.currentAttack > 0 ? piece.currentAttack : baseAttack;
             int currentHp = piece.currentHp;
 
             UpdateHealthUI(currentHp);

@@ -37,9 +37,16 @@ public class MatchmakingMenuUI : MonoBehaviour
     [Tooltip("If no match-found RPC arrives in this many seconds, re-enable the Play button and show a useful status instead of waiting forever.")]
     [SerializeField] private float lobbyMatchmakingTimeoutSeconds = 20f;
 
+    [Tooltip("Safety for Play -> Cancel -> Play demo flow: while waiting for quick match, resend the ready request every few seconds. Server-side request serial makes this idempotent and prevents stale cancel RPCs from deleting the newest ready request.")]
+    [SerializeField] private bool autoReassertQuickMatchWhileWaiting = true;
+
+    [SerializeField, Min(1f)] private float quickMatchReassertIntervalSeconds = 3f;
+
     private bool isMatchmaking;
     private bool lobbyConnectInProgress;
+    private bool currentLobbyWaitIsQuickMatch;
     private Coroutine lobbyWaitTimeoutCoroutine;
+    private Coroutine quickMatchReassertCoroutine;
 
     private void Awake()
     {
@@ -127,6 +134,8 @@ public class MatchmakingMenuUI : MonoBehaviour
             StopCoroutine(lobbyWaitTimeoutCoroutine);
             lobbyWaitTimeoutCoroutine = null;
         }
+
+        StopQuickMatchReassert();
     }
 
     private void OnPlayButtonClicked()
@@ -159,6 +168,8 @@ public class MatchmakingMenuUI : MonoBehaviour
     public void CancelLobbySearchFromMenu(string statusMessage = "Đã hủy tìm trận.")
     {
         StopLobbyWaitTimeout();
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
 
         ResolveRunnerHandler();
         if (runnerHandler != null)
@@ -252,6 +263,8 @@ public class MatchmakingMenuUI : MonoBehaviour
         }
 
         StopLobbyWaitTimeout();
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
         isMatchmaking = true;
         SetInteractable(false);
 
@@ -267,11 +280,13 @@ public class MatchmakingMenuUI : MonoBehaviour
             }
         }
 
+        currentLobbyWaitIsQuickMatch = true;
         bool requested = runnerHandler.ClientRequestLobbyMatchmaking();
         if (requested)
         {
             SetStatus("Find-match request sent/queued. Waiting for another ready lobby player...");
             StartLobbyWaitTimeout();
+            StartQuickMatchReassert();
         }
         else
         {
@@ -292,6 +307,8 @@ public class MatchmakingMenuUI : MonoBehaviour
         }
 
         StopLobbyWaitTimeout();
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
         isMatchmaking = true;
         SetInteractable(false);
 
@@ -332,6 +349,8 @@ public class MatchmakingMenuUI : MonoBehaviour
         }
 
         StopLobbyWaitTimeout();
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
         roomCode = SanitizeRoomCode(roomCode);
         if (string.IsNullOrWhiteSpace(roomCode))
         {
@@ -372,6 +391,8 @@ public class MatchmakingMenuUI : MonoBehaviour
     public void NotifyPreMatchCardSelectionOpened()
     {
         StopLobbyWaitTimeout();
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
 
         isMatchmaking = false;
         SetInteractable(false);
@@ -388,6 +409,50 @@ public class MatchmakingMenuUI : MonoBehaviour
         isMatchmaking = false;
 
         StopLobbyWaitTimeout();
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
+    }
+
+    private void StartQuickMatchReassert()
+    {
+        StopQuickMatchReassert();
+
+        if (!autoReassertQuickMatchWhileWaiting || !currentLobbyWaitIsQuickMatch)
+            return;
+
+        quickMatchReassertCoroutine = StartCoroutine(QuickMatchReassertRoutine());
+    }
+
+    private void StopQuickMatchReassert()
+    {
+        if (quickMatchReassertCoroutine != null)
+        {
+            StopCoroutine(quickMatchReassertCoroutine);
+            quickMatchReassertCoroutine = null;
+        }
+    }
+
+    private System.Collections.IEnumerator QuickMatchReassertRoutine()
+    {
+        float delay = Mathf.Max(1f, quickMatchReassertIntervalSeconds);
+
+        while (isMatchmaking && currentLobbyWaitIsQuickMatch)
+        {
+            yield return new WaitForSecondsRealtime(delay);
+
+            if (!isMatchmaking || !currentLobbyWaitIsQuickMatch)
+                break;
+
+            ResolveRunnerHandler();
+            if (runnerHandler != null && runnerHandler.IsClientConnectedToLobby)
+            {
+                bool resent = runnerHandler.ClientRequestLobbyMatchmaking();
+                if (resent)
+                    SetStatus("Đang tìm trận... đã gửi lại ready request để chống kẹt lobby.");
+            }
+        }
+
+        quickMatchReassertCoroutine = null;
     }
 
     private void StartLobbyWaitTimeout()
@@ -405,6 +470,8 @@ public class MatchmakingMenuUI : MonoBehaviour
             StopCoroutine(lobbyWaitTimeoutCoroutine);
             lobbyWaitTimeoutCoroutine = null;
         }
+
+        StopQuickMatchReassert();
     }
 
     private System.Collections.IEnumerator LobbyWaitTimeoutRoutine(float timeoutSeconds)
@@ -425,6 +492,8 @@ public class MatchmakingMenuUI : MonoBehaviour
             // the next Play click can look stuck because the server still has stale intent.
             // Cancel on server first, then let the player press Play again cleanly.
             runnerHandler.ClientCancelLobbyMatchmaking();
+            StopQuickMatchReassert();
+            currentLobbyWaitIsQuickMatch = false;
             SetStatus("Không ghép được trận trong thời gian chờ. Đã hủy request cũ, hãy bấm Play lại ở cả 2 client.");
             SetInteractable(true);
             isMatchmaking = false;

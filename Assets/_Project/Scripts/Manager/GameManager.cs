@@ -56,7 +56,6 @@ public class GameManager : SingletonMB<GameManager>
         {
             ChangeState(GameState.ResolvingAction);
             chessBoard.boardData.MoveEntity(movingPiece, finish);
-            movingPiece.hasMoved = true;
             OnPieceMoved?.Invoke(start, finish);
         }
         else
@@ -73,7 +72,6 @@ public class GameManager : SingletonMB<GameManager>
 
         ChangeState(GameState.ResolvingAction);
         chessBoard.boardData.MoveEntity(movingPiece, finish);
-        movingPiece.hasMoved = true;
         OnPieceMoved?.Invoke(start, finish);
     }
     public void ActionCompleted(bool consumesTurn)

@@ -98,6 +98,12 @@ public class ServerCardManager : NetworkBehaviour
         NetworkCardInstance cardInstance = controller.HandCards[handIndex];
         if (!cardInstance.isInitialized || cardInstance.currentCooldown > 0 || cardInstance.remainingUses <= 0) return false;
 
+        if (controller.IsCardUseSilenced)
+        {
+            Debug.LogWarning($"[Server Card] Player {player} tried to use a card while BishopSilence is active. Rejected.");
+            return false;
+        }
+
         CardData data = GetCardData(cardInstance.cardDataIndex);
         if (data == null) return false;
 
@@ -144,14 +150,7 @@ public class ServerCardManager : NetworkBehaviour
                 break;
 
             case CardEffectType.SuperBuff:
-                if (targetRuntime != null && targetNetPiece != null && targetRuntime.faction == myFaction)
-                {
-                    targetRuntime.currentAttack += data.effectValue1;
-                    targetRuntime.currentHealth += data.effectValue2;
-                    targetRuntime.isSuperBuffed = true;
-                    targetNetPiece.currentHp = targetRuntime.currentHealth;
-                }
-                else isSuccess = false;
+                isSuccess = TryApplyKingDamageSuperBuff(data, myFaction);
                 break;
 
             case CardEffectType.ExtraTurn:
@@ -209,6 +208,38 @@ public class ServerCardManager : NetworkBehaviour
         return isSuccess;
     }
 
+    private bool TryApplyKingDamageSuperBuff(CardData data, ChessFaction myFaction)
+    {
+        if (data == null || ServerBoardManager.Instance == null)
+            return false;
+
+        ChessPieceRuntime kingRuntime = FindKingRuntime(myFaction);
+        if (kingRuntime == null || kingRuntime.baseData == null)
+        {
+            Debug.LogWarning($"[Server Card] SuperBuff failed: cannot find friendly King for faction={myFaction}.");
+            return false;
+        }
+
+        string pieceName = kingRuntime.baseData.pieceName ?? string.Empty;
+        if (!pieceName.Contains("King"))
+            return false;
+
+        int multiplier = Mathf.Max(1, data.effectValue1 <= 0 ? 2 : data.effectValue1);
+        int durationTurns = Mathf.Max(1, data.effectValue2 <= 0 ? 3 : data.effectValue2);
+
+        kingRuntime.kingDamageMultiplier = multiplier;
+        kingRuntime.kingDamageBuffTurnsLeft = durationTurns;
+        kingRuntime.currentAttack = kingRuntime.baseData.baseAttack * multiplier;
+        kingRuntime.isSuperBuffed = true;
+
+        NetworkChessPiece kingNetPiece = ServerBoardManager.Instance.GetPieceAt(kingRuntime.currentGridPosition);
+        if (kingNetPiece != null)
+            ServerBoardManager.Instance.SyncNetworkPieceFromRuntime(kingNetPiece, kingRuntime);
+
+        Debug.Log($"[Server Card] SuperBuff applied to King. Faction={myFaction}, Multiplier=x{multiplier}, Turns={durationTurns}, RuntimeAttack={kingRuntime.currentAttack}.");
+        return true;
+    }
+
     private bool TryApplyPawnShield(CardData data, ChessFaction myFaction, ChessPieceRuntime targetRuntime)
     {
         if (targetRuntime == null || targetRuntime.faction != myFaction || targetRuntime.baseData == null)
@@ -226,12 +257,55 @@ public class ServerCardManager : NetworkBehaviour
 
     private bool TryApplyBishopSilence(CardData data, ChessFaction myFaction)
     {
-        ChessPieceRuntime enemyKing = FindKingRuntime(myFaction == ChessFaction.ChessRogue ? ChessFaction.ChessAlliance : ChessFaction.ChessRogue);
-        if (enemyKing == null)
+        if (ServerGameManager.Instance == null || Runner == null)
             return false;
 
+        ChessFaction enemyFaction = myFaction == ChessFaction.ChessRogue
+            ? ChessFaction.ChessAlliance
+            : ChessFaction.ChessRogue;
+
+        ChessPieceRuntime enemyKing = FindKingRuntime(enemyFaction);
+        if (enemyKing == null)
+        {
+            Debug.LogWarning($"[Server Card] BishopSilence failed: cannot find enemy King for faction {enemyFaction}.");
+            return false;
+        }
+
+        // Giữ lại field cũ để các UI/effect/logic cũ vẫn biết King đang bị silence.
         enemyKing.silencedTurnsLeft = Mathf.Max(1, data.effectValue1 <= 0 ? 1 : data.effectValue1);
+
+        PlayerRef targetPlayer = ResolvePlayerRefForFaction(enemyFaction);
+        if (targetPlayer == PlayerRef.None)
+        {
+            Debug.LogWarning($"[Server Card] BishopSilence failed: cannot resolve target player for faction {enemyFaction}.");
+            return false;
+        }
+
+        NetworkObject targetObject = Runner.GetPlayerObject(targetPlayer);
+        PlayerNetworkController targetController = targetObject != null ? targetObject.GetComponent<PlayerNetworkController>() : null;
+        if (targetController == null)
+        {
+            Debug.LogWarning($"[Server Card] BishopSilence failed: target PlayerNetworkController missing for {targetPlayer}.");
+            return false;
+        }
+
+        bool lockedCards = targetController.ApplyOneTurnCardUseSilence(data.cardName);
+        Debug.Log($"[Server Card] BishopSilence applied. TargetPlayer={targetPlayer}, TargetFaction={enemyFaction}, LockedCards={lockedCards}.");
         return true;
+    }
+
+    private PlayerRef ResolvePlayerRefForFaction(ChessFaction faction)
+    {
+        if (ServerGameManager.Instance == null)
+            return PlayerRef.None;
+
+        if (faction == ChessFaction.ChessRogue)
+            return ServerGameManager.Instance.kingPlayer;
+
+        if (faction == ChessFaction.ChessAlliance)
+            return ServerGameManager.Instance.chessPlayer;
+
+        return PlayerRef.None;
     }
 
     private bool TryApplyKingRevive(CardData data, ChessFaction myFaction, Vector2Int targetPos)
@@ -449,12 +523,14 @@ public class ServerCardManager : NetworkBehaviour
         if (data == null)
             return false;
 
+        if (data.effectType == CardEffectType.SuperBuff)
+            return false;
+
         if (!string.IsNullOrEmpty(data.requiredTargetName))
             return true;
 
         switch (data.effectType)
         {
-            case CardEffectType.SuperBuff:
             case CardEffectType.Recall:
             case CardEffectType.SummonCapturedPawn:
             case CardEffectType.KingRevive:

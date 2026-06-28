@@ -288,12 +288,21 @@
             if (!HasStateAuthority) return;
             if (!IsTurnState(currentGameState)) return;
 
+            PlayerRef endingPlayer = currentGameState == NetGameState.KingTurn ? kingPlayer : chessPlayer;
+
             StopTurnTimer();
             hasUsedPawnShieldThisTurn = false;
             manualResolveInProgress = false;
+            RestorePlayerCardUseSilence(endingPlayer);
 
             if (currentGameState == NetGameState.KingTurn)
             {
+                // SuperBuff của Rogue King tính theo số lượt KingTurn.
+                // Dùng card trong lượt hiện tại sẽ được hưởng damage xN trong lượt này,
+                // sau đó giảm 1 stack khi KingTurn kết thúc.
+                if (ServerBoardManager.Instance != null)
+                    ServerBoardManager.Instance.TickKingDamageBuffs(ChessFaction.ChessRogue);
+
                 TickPlayerCardCooldowns(chessPlayer);
                 TriggerResolvePhase(NetGameState.ChessTurn);
             }
@@ -303,6 +312,11 @@
                     phase1TurnCount++;
                 else
                     phase2TurnCount++;
+
+                // PawnForwardAttack is a one-turn Chess Alliance buff.
+                // Clear it when the Chess turn ends, before giving turn back to Rogue King.
+                if (ServerBoardManager.Instance != null)
+                    ServerBoardManager.Instance.ClearPawnForwardAttackBuffs(ChessFaction.ChessAlliance);
 
                 ServerBoardManager.Instance.TickTurnTimers(ChessFaction.ChessRogue);
                 TickPlayerCardCooldowns(kingPlayer);
@@ -322,6 +336,17 @@
                     if (controller != null) controller.TickCardCooldowns();
                 }
             }
+        }
+
+        private void RestorePlayerCardUseSilence(PlayerRef player)
+        {
+            if (player == PlayerRef.None)
+                return;
+
+            var playerObj = Runner != null ? Runner.GetPlayerObject(player) : null;
+            var controller = playerObj != null ? playerObj.GetComponent<PlayerNetworkController>() : null;
+            if (controller != null)
+                controller.RestoreCardUsesAfterOneTurnSilence();
         }
 
         private void TickPlayerWeaponCooldowns(PlayerRef player)

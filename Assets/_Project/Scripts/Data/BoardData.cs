@@ -79,7 +79,6 @@ public class BoardData
             if (entity is ChessPieceRuntime runtime)
             {
                 runtime.previousGridPosition = runtime.currentGridPosition;
-                runtime.hasMoved = true;
             }
 
             RemoveEntity(entity);
@@ -94,80 +93,9 @@ public class BoardData
 
         Vector2Int currentPos = pieceRuntime.currentGridPosition;
 
-
-        if (pieceRuntime.baseData.pieceName.Contains("Pawn"))
+        if (IsPawn(pieceRuntime))
         {
-            // ==================================================
-            // 1. LOGIC ĐẶC BIỆT DÀNH RIÊNG CHO QUÂN TỐT (PAWN) - BÀN CỜ NGANG
-            // ==================================================
-            if (pieceRuntime.baseData.pieceName.Contains("Pawn"))
-            {
-                // Xác định hướng tiến theo trục X (Ngang).
-                // Giả sử: ChessAlliance ở bên Trái (X tăng dần -> 1). Rogue ở bên Phải (X giảm dần -> -1).
-                // NẾU VÀO GAME THẤY TỐT ĐI LÙI, BẠN CHỈ CẦN ĐẢO NGƯỢC SỐ 1 VÀ -1 Ở DÒNG DƯỚI ĐÂY NHÉ:
-                int forwardDir = (pieceRuntime.faction == ChessFaction.ChessAlliance) ? 1 : -1;
-
-                // --- A. ĐI THẲNG (Theo Trục X) ---
-                for (int i = 1; i <= pieceRuntime.currentMoveRange; i++)
-                {
-                    // CỘNG forwardDir VÀO TRỤC X
-                    Vector2Int forwardMove = new Vector2Int(currentPos.x + (forwardDir * i), currentPos.y);
-
-                    if (!IsValidPosition(forwardMove.x, forwardMove.y)) break;
-
-                    // Nếu ô trống -> Cho đi tiếp
-                    if (IsTileEmptyForMovement(forwardMove.x, forwardMove.y))
-                    {
-                        validMoves.Add(forwardMove);
-                    }
-                    else
-                    {
-                        // Gặp vật cản. NẾU đang có thẻ bài "Ăn Thẳng" và cản ở ngay trước mặt (i=1)
-                        if (i == 1 && pieceRuntime.canAttackStraight)
-                        {
-                            var targetStraight = GetEntityAt<ChessPieceRuntime>(forwardMove.x, forwardMove.y);
-                            if (targetStraight != null && targetStraight.faction != pieceRuntime.faction)
-                            {
-                                validMoves.Add(forwardMove); // Cho phép chém thẳng
-                            }
-                        }
-                        break; // Bị chặn thì dừng tiến lên
-                    }
-                }
-
-                // --- B. NƯỚC ĐẦU TIÊN NHẢY 2 Ô (Theo Trục X) ---
-                if (!pieceRuntime.hasMoved)
-                {
-                    Vector2Int forward1 = new Vector2Int(currentPos.x + forwardDir, currentPos.y);
-                    Vector2Int forward2 = new Vector2Int(currentPos.x + (forwardDir * 2), currentPos.y);
-
-                    if (IsValidPosition(forward1.x, forward1.y) && IsTileEmptyForMovement(forward1.x, forward1.y) &&
-                        IsValidPosition(forward2.x, forward2.y) && IsTileEmptyForMovement(forward2.x, forward2.y))
-                    {
-                        if (!validMoves.Contains(forward2)) validMoves.Add(forward2);
-                    }
-                }
-
-                // --- C. ĂN CHÉO (Tiến lên theo X, Chéo lên/xuống theo Y) ---
-                Vector2Int diagUp = new Vector2Int(currentPos.x + forwardDir, currentPos.y + 1);
-                Vector2Int diagDown = new Vector2Int(currentPos.x + forwardDir, currentPos.y - 1);
-
-                // Kiểm tra chéo lên trên
-                if (IsValidPosition(diagUp.x, diagUp.y))
-                {
-                    var targetUp = GetEntityAt<ChessPieceRuntime>(diagUp.x, diagUp.y);
-                    if (targetUp != null && targetUp.faction != pieceRuntime.faction)
-                        validMoves.Add(diagUp);
-                }
-
-                // Kiểm tra chéo xuống dưới
-                if (IsValidPosition(diagDown.x, diagDown.y))
-                {
-                    var targetDown = GetEntityAt<ChessPieceRuntime>(diagDown.x, diagDown.y);
-                    if (targetDown != null && targetDown.faction != pieceRuntime.faction)
-                        validMoves.Add(diagDown);
-                }
-            }
+            AddClassicPawnMoves(validMoves, pieceRuntime, currentPos);
         }
         else
         {
@@ -207,5 +135,105 @@ public class BoardData
         }
 
         return validMoves;
+    }
+
+    private void AddClassicPawnMoves(List<Vector2Int> validMoves, ChessPieceRuntime pawnRuntime, Vector2Int currentPos)
+    {
+        // Classic pawn rule for this board:
+        // - Forward direction is configured in ChessPieceData.pawnForwardDirection.
+        // - Normal movement: one forward cell only, and only when that cell is empty.
+        // - First movement only: two forward cells, and only when both forward cells are empty.
+        // - Normal capture: one diagonal-forward cell, and only when occupied by an enemy.
+        // - Blocked: any piece directly in front blocks forward movement.
+        // - PawnForwardAttack card/buff: pawn may capture the enemy directly in front during that turn only.
+        Vector2Int forward = GetPawnForwardDirection(pawnRuntime);
+        Vector2Int oneForward = currentPos + forward;
+
+        if (IsValidPosition(oneForward.x, oneForward.y))
+        {
+            ChessPieceRuntime straightTarget = GetEntityAt<ChessPieceRuntime>(oneForward.x, oneForward.y);
+            bool oneForwardIsEmpty = IsTileEmptyForMovement(oneForward.x, oneForward.y);
+
+            if (oneForwardIsEmpty)
+            {
+                AddUnique(validMoves, oneForward);
+
+                if (!pawnRuntime.hasMoved)
+                {
+                    Vector2Int twoForward = currentPos + (forward * 2);
+                    if (IsValidPosition(twoForward.x, twoForward.y) && IsTileEmptyForMovement(twoForward.x, twoForward.y))
+                    {
+                        AddUnique(validMoves, twoForward);
+                    }
+                }
+            }
+            else if (pawnRuntime.canAttackStraight && straightTarget != null && straightTarget.faction != pawnRuntime.faction)
+            {
+                AddUnique(validMoves, oneForward);
+            }
+        }
+
+        Vector2Int side = new Vector2Int(-forward.y, forward.x);
+        AddPawnDiagonalCapture(validMoves, pawnRuntime, currentPos + forward + side);
+        AddPawnDiagonalCapture(validMoves, pawnRuntime, currentPos + forward - side);
+    }
+
+    private Vector2Int GetPawnForwardDirection(ChessPieceRuntime pawnRuntime)
+    {
+        Vector2Int forward = Vector2Int.right;
+
+        if (pawnRuntime != null && pawnRuntime.baseData != null)
+        {
+            forward = pawnRuntime.baseData.pawnForwardDirection;
+
+            if (forward == Vector2Int.zero && pawnRuntime.baseData.moveDirections != null && pawnRuntime.baseData.moveDirections.Count > 0)
+            {
+                forward = pawnRuntime.baseData.moveDirections[0];
+            }
+
+            if (pawnRuntime.baseData.mirrorPawnForwardForRogueFaction && pawnRuntime.faction == ChessFaction.ChessRogue)
+            {
+                forward = -forward;
+            }
+        }
+
+        return NormalizeCardinalDirection(forward, Vector2Int.right);
+    }
+
+    private static Vector2Int NormalizeCardinalDirection(Vector2Int direction, Vector2Int fallback)
+    {
+        if (direction == Vector2Int.zero)
+            return fallback;
+
+        if (Mathf.Abs(direction.x) >= Mathf.Abs(direction.y))
+            return new Vector2Int(direction.x >= 0 ? 1 : -1, 0);
+
+        return new Vector2Int(0, direction.y >= 0 ? 1 : -1);
+    }
+
+    private void AddPawnDiagonalCapture(List<Vector2Int> validMoves, ChessPieceRuntime pawnRuntime, Vector2Int targetPos)
+    {
+        if (!IsValidPosition(targetPos.x, targetPos.y))
+            return;
+
+        ChessPieceRuntime target = GetEntityAt<ChessPieceRuntime>(targetPos.x, targetPos.y);
+        if (target != null && target.faction != pawnRuntime.faction)
+        {
+            AddUnique(validMoves, targetPos);
+        }
+    }
+
+    private static bool IsPawn(ChessPieceRuntime pieceRuntime)
+    {
+        return pieceRuntime != null &&
+               pieceRuntime.baseData != null &&
+               !string.IsNullOrEmpty(pieceRuntime.baseData.pieceName) &&
+               pieceRuntime.baseData.pieceName.IndexOf("Pawn", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static void AddUnique(List<Vector2Int> list, Vector2Int value)
+    {
+        if (!list.Contains(value))
+            list.Add(value);
     }
 }

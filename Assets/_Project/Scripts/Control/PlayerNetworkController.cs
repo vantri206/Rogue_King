@@ -330,37 +330,37 @@ public class PlayerNetworkController : NetworkBehaviour
     }
 
 
-    public void ClientRequestFindMatchFromLobby()
+    public void ClientRequestFindMatchFromLobby(int requestSerial = 0)
     {
         if (!HasInputAuthority)
             return;
 
-        Rpc_RequestFindMatchFromLobby();
+        Rpc_RequestFindMatchFromLobby(requestSerial);
     }
 
-    public void ClientRequestCreateCustomRoomFromLobby()
+    public void ClientRequestCreateCustomRoomFromLobby(int requestSerial = 0)
     {
         if (!HasInputAuthority)
             return;
 
-        Rpc_RequestCreateCustomRoomFromLobby();
+        Rpc_RequestCreateCustomRoomFromLobby(requestSerial);
     }
 
-    public void ClientRequestJoinCustomRoomFromLobby(string roomCode)
+    public void ClientRequestJoinCustomRoomFromLobby(string roomCode, int requestSerial = 0)
     {
         if (!HasInputAuthority)
             return;
 
         string safeCode = SanitizeRoomCode(roomCode);
-        Rpc_RequestJoinCustomRoomFromLobby(safeCode);
+        Rpc_RequestJoinCustomRoomFromLobby(safeCode, requestSerial);
     }
 
-    public void ClientCancelLobbyRequestFromLobby()
+    public void ClientCancelLobbyRequestFromLobby(int requestSerial = 0)
     {
         if (!HasInputAuthority)
             return;
 
-        Rpc_CancelLobbyRequest();
+        Rpc_CancelLobbyRequest(requestSerial);
     }
 
     public void ClientRequestLeaderboardRefresh()
@@ -372,43 +372,43 @@ public class PlayerNetworkController : NetworkBehaviour
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void Rpc_RequestFindMatchFromLobby(RpcInfo info = default)
+    private void Rpc_RequestFindMatchFromLobby(int requestSerial, RpcInfo info = default)
     {
         if (!HasStateAuthority)
             return;
 
         if (NetworkRunnerHandler.Active != null)
-            NetworkRunnerHandler.Active.ServerPlayerRequestedLobbyMatch(info.Source);
+            NetworkRunnerHandler.Active.ServerPlayerRequestedLobbyMatch(info.Source, requestSerial);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void Rpc_RequestCreateCustomRoomFromLobby(RpcInfo info = default)
+    private void Rpc_RequestCreateCustomRoomFromLobby(int requestSerial, RpcInfo info = default)
     {
         if (!HasStateAuthority)
             return;
 
         if (NetworkRunnerHandler.Active != null)
-            NetworkRunnerHandler.Active.ServerPlayerRequestedCreateCustomRoom(info.Source);
+            NetworkRunnerHandler.Active.ServerPlayerRequestedCreateCustomRoom(info.Source, requestSerial);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void Rpc_RequestJoinCustomRoomFromLobby(NetworkString<_32> roomCode, RpcInfo info = default)
+    private void Rpc_RequestJoinCustomRoomFromLobby(NetworkString<_32> roomCode, int requestSerial, RpcInfo info = default)
     {
         if (!HasStateAuthority)
             return;
 
         if (NetworkRunnerHandler.Active != null)
-            NetworkRunnerHandler.Active.ServerPlayerRequestedJoinCustomRoom(info.Source, roomCode.ToString());
+            NetworkRunnerHandler.Active.ServerPlayerRequestedJoinCustomRoom(info.Source, roomCode.ToString(), requestSerial);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
-    private void Rpc_CancelLobbyRequest(RpcInfo info = default)
+    private void Rpc_CancelLobbyRequest(int requestSerial, RpcInfo info = default)
     {
         if (!HasStateAuthority)
             return;
 
         if (NetworkRunnerHandler.Active != null)
-            NetworkRunnerHandler.Active.ServerPlayerCancelledLobbyRequest(info.Source);
+            NetworkRunnerHandler.Active.ServerPlayerCancelledLobbyRequest(info.Source, requestSerial);
     }
 
     [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -672,6 +672,7 @@ public class PlayerNetworkController : NetworkBehaviour
         public int PieceDataIndex;
         public ChessFaction Faction;
         public bool IsKing;
+        public bool HasMoved;
     }
 
     private bool TryGetNetworkPieceSnapshot(NetworkChessPiece piece, out NetworkPieceSnapshot snapshot)
@@ -690,6 +691,7 @@ public class PlayerNetworkController : NetworkBehaviour
             snapshot.PieceDataIndex = piece.pieceDataIndex;
             snapshot.Faction = piece.faction;
             snapshot.IsKing = piece.isKing;
+            snapshot.HasMoved = piece.hasMoved;
             return true;
         }
         catch (System.InvalidOperationException)
@@ -1807,7 +1809,12 @@ public class PlayerNetworkController : NetworkBehaviour
 
         if (pieceData == null) return null;
 
-        return new ChessPieceRuntime(pieceData, pieceSnapshot.GridPos, pieceSnapshot.Faction);
+        ChessPieceRuntime runtime = new ChessPieceRuntime(pieceData, pieceSnapshot.GridPos, pieceSnapshot.Faction);
+        runtime.hasMoved = pieceSnapshot.HasMoved;
+        runtime.currentHealth = pieceSnapshot.CurrentHp;
+        runtime.currentSkillCooldown = pieceSnapshot.CurrentSkillCooldown;
+        runtime.silencedTurnsLeft = pieceSnapshot.SilencedTurnsLeft;
+        return runtime;
     }
 
     private void ShowHighlightTiles(List<Vector2Int> validTiles, TileState state)
@@ -1964,6 +1971,13 @@ public class PlayerNetworkController : NetworkBehaviour
     [Networked] public NetworkBool hasExtraTurn { get; set; }
     private bool deckInitializedOnServer;
     private ChessFaction lastInitializedDeckFaction = ChessFaction.Neutral;
+
+    // Server-only backup dùng cho BishopSilence: khóa card 1 lượt bằng cách set remainingUses=0,
+    // sau đó restore lại uses cũ khi lượt bị silence kết thúc.
+    private readonly int[] cardSilenceStoredUses = new int[10];
+    private readonly int[] cardSilenceStoredCardDataIndex = new int[10];
+    private readonly bool[] cardSilenceStoredSlotActive = new bool[10];
+    private bool cardUseSilenceActive;
 
     // Mảng thẻ bài đồng bộ thời gian thực. Khi Server thay đổi, hàm OnHandCardsChanged sẽ tự động chạy ở Client.
     [Networked, Capacity(10), OnChangedRender(nameof(OnHandCardsChanged))]
@@ -2157,6 +2171,90 @@ public class PlayerNetworkController : NetworkBehaviour
         {
             HandCards.Set(i, default);
         }
+
+        ClearCardUseSilenceBackup(restoreStoredUses: false);
+    }
+
+    public bool IsCardUseSilenced => cardUseSilenceActive;
+
+    public bool ApplyOneTurnCardUseSilence(string reason = null)
+    {
+        if (!HasStateAuthority) return false;
+
+        if (cardUseSilenceActive)
+        {
+            Debug.Log($"[Server Card] Card-use silence is already active for {Object.InputAuthority}. Reason={reason}");
+            return true;
+        }
+
+        ClearCardUseSilenceBackup(restoreStoredUses: false);
+
+        int limit = Mathf.Min(HandCards.Length, cardSilenceStoredUses.Length);
+        bool foundAnyCard = false;
+
+        for (int i = 0; i < limit; i++)
+        {
+            NetworkCardInstance card = HandCards[i];
+            if (!card.isInitialized)
+                continue;
+
+            foundAnyCard = true;
+            cardSilenceStoredSlotActive[i] = true;
+            cardSilenceStoredUses[i] = card.remainingUses;
+            cardSilenceStoredCardDataIndex[i] = card.cardDataIndex;
+
+            if (card.remainingUses != 0)
+            {
+                card.remainingUses = 0;
+                HandCards.Set(i, card);
+            }
+        }
+
+        cardUseSilenceActive = true;
+        Debug.Log($"[Server Card] BishopSilence locked card uses for {Object.InputAuthority}. CardsFound={foundAnyCard}, Reason={reason}");
+        return true;
+    }
+
+    public bool RestoreCardUsesAfterOneTurnSilence()
+    {
+        if (!HasStateAuthority || !cardUseSilenceActive)
+            return false;
+
+        int limit = Mathf.Min(HandCards.Length, cardSilenceStoredUses.Length);
+        int restoredCount = 0;
+
+        for (int i = 0; i < limit; i++)
+        {
+            if (!cardSilenceStoredSlotActive[i])
+                continue;
+
+            NetworkCardInstance card = HandCards[i];
+            if (!card.isInitialized || card.cardDataIndex != cardSilenceStoredCardDataIndex[i])
+                continue;
+
+            card.remainingUses = Mathf.Max(0, cardSilenceStoredUses[i]);
+            HandCards.Set(i, card);
+            restoredCount++;
+        }
+
+        ClearCardUseSilenceBackup(restoreStoredUses: false);
+        Debug.Log($"[Server Card] BishopSilence ended for {Object.InputAuthority}. RestoredUsesSlots={restoredCount}.");
+        return true;
+    }
+
+    private void ClearCardUseSilenceBackup(bool restoreStoredUses)
+    {
+        if (restoreStoredUses)
+            RestoreCardUsesAfterOneTurnSilence();
+
+        cardUseSilenceActive = false;
+
+        for (int i = 0; i < cardSilenceStoredUses.Length; i++)
+        {
+            cardSilenceStoredUses[i] = 0;
+            cardSilenceStoredCardDataIndex[i] = -1;
+            cardSilenceStoredSlotActive[i] = false;
+        }
     }
 
     private void TrySubmitLocalCardLoadoutToServer()
@@ -2247,6 +2345,11 @@ public class PlayerNetworkController : NetworkBehaviour
     {
         if (ServerCardManager.Instance == null || ServerGameManager.Instance == null) return;
         if (!ServerGameManager.Instance.CanPlayerAct(info.Source)) return;
+        if (cardUseSilenceActive)
+        {
+            Debug.Log($"[Server Card] Player {info.Source} cannot use cards this turn because BishopSilence is active.");
+            return;
+        }
 
         ServerCardManager.Instance.ProcessCardRequest(info.Source, this, handIndex, targetPos);
     }
@@ -2272,6 +2375,7 @@ public class PlayerNetworkController : NetworkBehaviour
 
         // Runtime-only card effects must not leak through PhaseTransition/GameOver/reset.
         hasExtraTurn = false;
+        ClearCardUseSilenceBackup(restoreStoredUses: false);
         ResetDynamicCardUses(CardEffectType.SummonCapturedPawn);
     }
 
@@ -2425,7 +2529,6 @@ public class PlayerNetworkController : NetworkBehaviour
 
             switch (data.effectType)
             {
-                case CardEffectType.SuperBuff:
                 case CardEffectType.Recall:
                     allowed = isFriendly;
                     break;
@@ -2559,6 +2662,7 @@ public class PlayerNetworkController : NetworkBehaviour
                     affected = snapshot.Faction == myFaction && pieceName.Contains("Pawn");
                     break;
 
+                case CardEffectType.SuperBuff:
                 case CardEffectType.ExtraTurn:
                     affected = snapshot.Faction == myFaction && pieceName.Contains("King");
                     break;
@@ -2628,12 +2732,14 @@ public class PlayerNetworkController : NetworkBehaviour
         if (data == null)
             return false;
 
+        if (data.effectType == CardEffectType.SuperBuff)
+            return false;
+
         if (!string.IsNullOrEmpty(data.requiredTargetName))
             return true;
 
         switch (data.effectType)
         {
-            case CardEffectType.SuperBuff:
             case CardEffectType.Recall:
             case CardEffectType.SummonCapturedPawn:
             case CardEffectType.KingRevive:

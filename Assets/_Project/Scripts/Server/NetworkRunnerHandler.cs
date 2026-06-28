@@ -155,9 +155,14 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     }
 
     private readonly Dictionary<string, LobbyCustomRoomReservation> lobbyCustomRooms = new Dictionary<string, LobbyCustomRoomReservation>();
+    private readonly Dictionary<PlayerRef, int> lobbyLatestRequestSerialByPlayer = new Dictionary<PlayerRef, int>();
     private bool pendingLobbyCreateRoomRequest;
     private bool pendingLobbyJoinRoomRequest;
     private string pendingLobbyJoinRoomCode;
+    private int clientLobbyRequestSerial;
+    private int pendingLobbyMatchRequestSerial;
+    private int pendingLobbyCreateRoomRequestSerial;
+    private int pendingLobbyJoinRoomRequestSerial;
 
     private void Awake()
     {
@@ -224,25 +229,31 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         if (pendingLobbyCreateRoomRequest)
         {
+            int requestSerial = pendingLobbyCreateRoomRequestSerial;
             pendingLobbyCreateRoomRequest = false;
-            Debug.Log("[Lobby] Sending queued custom-room create request now that local player object is ready.");
-            controller.ClientRequestCreateCustomRoomFromLobby();
+            pendingLobbyCreateRoomRequestSerial = 0;
+            Debug.Log($"[Lobby] Sending queued custom-room create request #{requestSerial} now that local player object is ready.");
+            controller.ClientRequestCreateCustomRoomFromLobby(requestSerial);
         }
 
         if (pendingLobbyJoinRoomRequest)
         {
             string roomCode = pendingLobbyJoinRoomCode;
+            int requestSerial = pendingLobbyJoinRoomRequestSerial;
             pendingLobbyJoinRoomRequest = false;
             pendingLobbyJoinRoomCode = null;
-            Debug.Log($"[Lobby] Sending queued custom-room join request for code '{roomCode}' now that local player object is ready.");
-            controller.ClientRequestJoinCustomRoomFromLobby(roomCode);
+            pendingLobbyJoinRoomRequestSerial = 0;
+            Debug.Log($"[Lobby] Sending queued custom-room join request #{requestSerial} for code '{roomCode}' now that local player object is ready.");
+            controller.ClientRequestJoinCustomRoomFromLobby(roomCode, requestSerial);
         }
 
         if (pendingLobbyMatchRequest)
         {
+            int requestSerial = pendingLobbyMatchRequestSerial;
             pendingLobbyMatchRequest = false;
-            Debug.Log("[Lobby] Sending queued find-match request now that local player object is ready.");
-            controller.ClientRequestFindMatchFromLobby();
+            pendingLobbyMatchRequestSerial = 0;
+            Debug.Log($"[Lobby] Sending queued find-match request #{requestSerial} now that local player object is ready.");
+            controller.ClientRequestFindMatchFromLobby(requestSerial);
         }
     }
 
@@ -307,6 +318,15 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return StartGame();
     }
 
+    private int NextLobbyRequestSerial()
+    {
+        clientLobbyRequestSerial++;
+        if (clientLobbyRequestSerial <= 0)
+            clientLobbyRequestSerial = 1;
+
+        return clientLobbyRequestSerial;
+    }
+
     public bool ClientRequestLobbyMatchmaking()
     {
         if (!currentRunIsLobby || runner == null || runner.IsServer)
@@ -315,18 +335,27 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
+        int requestSerial = NextLobbyRequestSerial();
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
+        pendingLobbyJoinRoomCode = null;
+
         PlayerNetworkController controller = GetLocalPlayerController();
         if (controller == null)
         {
             // PlayerObject replication can arrive a few frames after the lobby connection succeeds.
             // Do not fail the button click; queue it and send as soon as the local controller is ready.
             pendingLobbyMatchRequest = true;
-            Debug.LogWarning("[Lobby] Local PlayerNetworkController is not ready yet. Find-match request queued.");
+            pendingLobbyMatchRequestSerial = requestSerial;
+            Debug.LogWarning($"[Lobby] Local PlayerNetworkController is not ready yet. Find-match request #{requestSerial} queued.");
             return true;
         }
 
         pendingLobbyMatchRequest = false;
-        controller.ClientRequestFindMatchFromLobby();
+        pendingLobbyMatchRequestSerial = 0;
+        controller.ClientRequestFindMatchFromLobby(requestSerial);
         return true;
     }
 
@@ -338,16 +367,25 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
+        int requestSerial = NextLobbyRequestSerial();
+        pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
+        pendingLobbyJoinRoomCode = null;
+
         PlayerNetworkController controller = GetLocalPlayerController();
         if (controller == null)
         {
             pendingLobbyCreateRoomRequest = true;
-            Debug.LogWarning("[Lobby] Local PlayerNetworkController is not ready yet. Custom-room create request queued.");
+            pendingLobbyCreateRoomRequestSerial = requestSerial;
+            Debug.LogWarning($"[Lobby] Local PlayerNetworkController is not ready yet. Custom-room create request #{requestSerial} queued.");
             return true;
         }
 
         pendingLobbyCreateRoomRequest = false;
-        controller.ClientRequestCreateCustomRoomFromLobby();
+        pendingLobbyCreateRoomRequestSerial = 0;
+        controller.ClientRequestCreateCustomRoomFromLobby(requestSerial);
         return true;
     }
 
@@ -363,26 +401,39 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (string.IsNullOrWhiteSpace(roomCode))
             return ClientRequestLobbyMatchmaking();
 
+        int requestSerial = NextLobbyRequestSerial();
+        pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
+
         PlayerNetworkController controller = GetLocalPlayerController();
         if (controller == null)
         {
             pendingLobbyJoinRoomRequest = true;
             pendingLobbyJoinRoomCode = roomCode;
-            Debug.LogWarning($"[Lobby] Local PlayerNetworkController is not ready yet. Join custom-room '{roomCode}' request queued.");
+            pendingLobbyJoinRoomRequestSerial = requestSerial;
+            Debug.LogWarning($"[Lobby] Local PlayerNetworkController is not ready yet. Join custom-room '{roomCode}' request #{requestSerial} queued.");
             return true;
         }
 
         pendingLobbyJoinRoomRequest = false;
         pendingLobbyJoinRoomCode = null;
-        controller.ClientRequestJoinCustomRoomFromLobby(roomCode);
+        pendingLobbyJoinRoomRequestSerial = 0;
+        controller.ClientRequestJoinCustomRoomFromLobby(roomCode, requestSerial);
         return true;
     }
 
     public bool ClientCancelLobbyMatchmaking()
     {
+        int requestSerial = NextLobbyRequestSerial();
+
         pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
         pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
         pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
         pendingLobbyJoinRoomCode = null;
 
         if (!currentRunIsLobby || runner == null || runner.IsServer)
@@ -398,7 +449,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return true;
         }
 
-        controller.ClientCancelLobbyRequestFromLobby();
+        controller.ClientCancelLobbyRequestFromLobby(requestSerial);
         return true;
     }
 
@@ -504,8 +555,11 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             pendingCardSelectionSessionName = matchSessionName;
             pendingCardSelectionRoomCode = roomCode;
             pendingLobbyMatchRequest = false;
+            pendingLobbyMatchRequestSerial = 0;
             pendingLobbyCreateRoomRequest = false;
+            pendingLobbyCreateRoomRequestSerial = 0;
             pendingLobbyJoinRoomRequest = false;
+            pendingLobbyJoinRoomRequestSerial = 0;
             Debug.Log($"[Lobby] Match found. Opening pre-match card selection. Session='{matchSessionName}', RoomCode='{roomCode}'.");
             selectionUI.ShowForMatch(matchSessionName, roomCode);
             MatchmakingMenuUI menu = FindFirstObjectByType<MatchmakingMenuUI>(FindObjectsInactive.Include);
@@ -541,8 +595,11 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         pendingCardSelectionSessionName = null;
         pendingCardSelectionRoomCode = null;
         pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
         pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
         pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
         pendingLobbyJoinRoomCode = null;
 
         ClientCancelLobbyMatchmaking();
@@ -576,7 +633,13 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         runtimeSessionOverride = matchSessionName;
 
         pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
         pendingLeaderboardRefreshRequest = false;
+        pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
+        pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
+        pendingLobbyJoinRoomCode = null;
         pendingPreMatchCardSelection = false;
         pendingCardSelectionSessionName = null;
         pendingCardSelectionRoomCode = null;
@@ -760,9 +823,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         currentRunIsLobby = false;
         currentRunWasServerLike = false;
         pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
         pendingLeaderboardRefreshRequest = false;
         pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
         pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
         pendingLobbyJoinRoomCode = null;
         pendingRoomCodeForMatch = null;
         currentRoomCode = string.Empty;
@@ -1385,7 +1451,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     }
 
 
-    public bool ServerPlayerRequestedLobbyMatch(PlayerRef player)
+    public bool ServerPlayerRequestedLobbyMatch(PlayerRef player, int requestSerial = 0)
     {
         if (runner == null || !runner.IsServer || !currentRunIsLobby)
             return false;
@@ -1397,6 +1463,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogWarning($"[Lobby] Ignored ready request from non-connected Player {player.PlayerId}.");
             return false;
         }
+
+        if (!AcceptLobbyRequestSerial(player, requestSerial, "quick-play"))
+            return false;
 
         // A player can press Create Room, cancel, hit timeout, return from card selection, or rematch.
         // In all of those cases, a fresh Quick Play should be treated as a clean new lobby intent.
@@ -1413,7 +1482,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return true;
     }
 
-    public bool ServerPlayerRequestedCreateCustomRoom(PlayerRef player)
+    public bool ServerPlayerRequestedCreateCustomRoom(PlayerRef player, int requestSerial = 0)
     {
         if (runner == null || !runner.IsServer || !currentRunIsLobby)
             return false;
@@ -1425,6 +1494,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogWarning($"[Lobby] Ignored custom-room create request from non-connected Player {player.PlayerId}.");
             return false;
         }
+
+        if (!AcceptLobbyRequestSerial(player, requestSerial, "create-room"))
+            return false;
 
         // Re-clicking Create Room after a failed/cancelled attempt should not leave an old room
         // reservation owned by the same player that blocks the UI forever.
@@ -1451,7 +1523,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return true;
     }
 
-    public bool ServerPlayerRequestedJoinCustomRoom(PlayerRef player, string roomCode)
+    public bool ServerPlayerRequestedJoinCustomRoom(PlayerRef player, string roomCode, int requestSerial = 0)
     {
         if (runner == null || !runner.IsServer || !currentRunIsLobby)
             return false;
@@ -1464,6 +1536,9 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogWarning($"[Lobby] Ignored custom-room join request from non-connected Player {player.PlayerId}.");
             return false;
         }
+
+        if (!AcceptLobbyRequestSerial(player, requestSerial, "join-room"))
+            return false;
 
         if (string.IsNullOrWhiteSpace(roomCode) || !lobbyCustomRooms.ContainsKey(roomCode))
         {
@@ -1485,6 +1560,43 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} joined room code {roomCode}. Sending joiner to match session '{sessionName}'.");
         SendLobbyMatchFound(player, sessionName, roomCode);
         return true;
+    }
+
+    private bool AcceptLobbyRequestSerial(PlayerRef player, int requestSerial, string requestType)
+    {
+        if (player == PlayerRef.None)
+            return false;
+
+        // Older builds or fallback calls can pass 0. Treat them as always current so old debug
+        // utilities still work, but all patched client UI requests send a positive serial.
+        if (requestSerial <= 0)
+            return true;
+
+        if (lobbyLatestRequestSerialByPlayer.TryGetValue(player, out int latestSerial) && requestSerial < latestSerial)
+        {
+            Debug.LogWarning($"[Lobby] Ignored stale {requestType} request #{requestSerial} from Player {player.PlayerId}. Latest request is #{latestSerial}.");
+            return false;
+        }
+
+        lobbyLatestRequestSerialByPlayer[player] = requestSerial;
+        return true;
+    }
+
+    private bool IsStaleLobbyRequestSerial(PlayerRef player, int requestSerial, string requestType)
+    {
+        if (player == PlayerRef.None)
+            return true;
+
+        if (requestSerial <= 0)
+            return false;
+
+        if (lobbyLatestRequestSerialByPlayer.TryGetValue(player, out int latestSerial) && requestSerial < latestSerial)
+        {
+            Debug.LogWarning($"[Lobby] Ignored stale {requestType} request #{requestSerial} from Player {player.PlayerId}. Latest request is #{latestSerial}.");
+            return true;
+        }
+
+        return false;
     }
 
     private int RemoveCustomRoomsOwnedBy(PlayerRef player, string reason)
@@ -1516,10 +1628,16 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return ownedRoomCodes.Count;
     }
 
-    public bool ServerPlayerCancelledLobbyRequest(PlayerRef player)
+    public bool ServerPlayerCancelledLobbyRequest(PlayerRef player, int requestSerial = 0)
     {
         if (runner == null || !runner.IsServer || !currentRunIsLobby)
             return false;
+
+        if (IsStaleLobbyRequestSerial(player, requestSerial, "cancel"))
+            return false;
+
+        if (requestSerial > 0)
+            lobbyLatestRequestSerialByPlayer[player] = requestSerial;
 
         bool changed = false;
 
@@ -1746,6 +1864,8 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         connectedPlayers.Remove(player);
         lobbyReadyPlayers.Remove(player);
+        lobbyLatestRequestSerialByPlayer.Remove(player);
+        RemoveCustomRoomsOwnedBy(player, "player left lobby/session");
 
         if (ServerLeaderboardManager.Instance != null)
             ServerLeaderboardManager.Instance.ForgetActivePlayer(player);
@@ -1870,9 +1990,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         currentRunIsLobby = false;
         currentRunWasServerLike = false;
         pendingLobbyMatchRequest = false;
+        pendingLobbyMatchRequestSerial = 0;
         pendingLeaderboardRefreshRequest = false;
         pendingLobbyCreateRoomRequest = false;
+        pendingLobbyCreateRoomRequestSerial = 0;
         pendingLobbyJoinRoomRequest = false;
+        pendingLobbyJoinRoomRequestSerial = 0;
         pendingLobbyJoinRoomCode = null;
         pendingRoomCodeForMatch = null;
         currentRoomCode = string.Empty;
