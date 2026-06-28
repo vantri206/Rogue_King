@@ -1566,6 +1566,9 @@ MonoBehaviour:
   quickMatchRetryCount: 3
   retryDelaySeconds: 1.25
   lobbyMatchmakingTimeoutSeconds: 20
+  customRoomWaitTimeoutSeconds: 180
+  localLobbyPlayerObjectWaitTimeoutSeconds: 5
+  lobbyConnectInProgressWaitTimeoutSeconds: 8
   autoReassertQuickMatchWhileWaiting: 1
   quickMatchReassertIntervalSeconds: 3
 --- !u!4 &629904230
@@ -2365,6 +2368,17 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 933229005}
   m_CullTransparentMesh: 1
+--- !u!114 &951408592 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7457802367093116802, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+  m_PrefabInstance: {fileID: 3894933160530991721}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
 --- !u!1 &1091120388
 GameObject:
   m_ObjectHideFlags: 0
@@ -4288,7 +4302,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1946135712
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4471,6 +4485,17 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2135623631}
   m_CullTransparentMesh: 1
+--- !u!114 &2135699173 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7784467277988406208, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+  m_PrefabInstance: {fileID: 3894933160530991721}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
 --- !u!1001 &1682515401971613816
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4646,6 +4671,22 @@ PrefabInstance:
       propertyPath: m_Name
       value: CardDescriptionCanvas
       objectReference: {fileID: 0}
+    - target: {fileID: 4224328175771085916, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: -1551.7542
+      objectReference: {fileID: 0}
+    - target: {fileID: 4224328175771085916, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: -927.0061
+      objectReference: {fileID: 0}
+    - target: {fileID: 4224328175771085916, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: -623.8771
+      objectReference: {fileID: 0}
+    - target: {fileID: 4224328175771085916, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 318.32605
+      objectReference: {fileID: 0}
     - target: {fileID: 5850091247768551200, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
       propertyPath: m_Pivot.x
       value: 0
@@ -4731,8 +4772,36 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 0}
     - target: {fileID: 7457802367093116802, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_Color.b
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7457802367093116802, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_Color.g
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7457802367093116802, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_Color.r
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7457802367093116802, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
       propertyPath: m_Enabled
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7784467277988406208, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_text
+      value: "Buff cho t\u1ED1t 1 m\xE1u."
+      objectReference: {fileID: 0}
+    - target: {fileID: 7784467277988406208, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_fontSize
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 7784467277988406208, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_fontStyle
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7784467277988406208, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
+      propertyPath: m_fontSizeBase
+      value: 30
       objectReference: {fileID: 0}
     - target: {fileID: 8853303528665534611, guid: 19ac960de2c035943a4d28f93b02bcab, type: 3}
       propertyPath: m_IsActive
@@ -5028,12 +5097,20 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
       propertyPath: fontSize
-      value: 48
+      value: 30
       objectReference: {fileID: 0}
     - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
       propertyPath: rootPanel
       value: 
       objectReference: {fileID: 78887028}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: panelSize.x
+      value: 230
+      objectReference: {fileID: 0}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: panelSize.y
+      value: 110
+      objectReference: {fileID: 0}
     - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
       propertyPath: textColor.b
       value: 0.9070463
@@ -5050,6 +5127,38 @@ PrefabInstance:
       propertyPath: targetCanvas
       value: 
       objectReference: {fileID: 885703662}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: screenOffset.x
+      value: 36
+      objectReference: {fileID: 0}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: screenOffset.y
+      value: -36
+      objectReference: {fileID: 0}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: backgroundImage
+      value: 
+      objectReference: {fileID: 951408592}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: descriptionText
+      value: 
+      objectReference: {fileID: 2135699173}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: backgroundSprite
+      value: 
+      objectReference: {fileID: -7016668669189678919, guid: b0200e3b97756d949994dbe1b290d465, type: 3}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: backgroundColor.b
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: backgroundColor.g
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6396720929815899330, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
+      propertyPath: backgroundColor.r
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 6663545296316527163, guid: 5c79737cb19416f43a6efd5cb8d1e145, type: 3}
       propertyPath: m_Name
       value: CardDescriptionPopup
@@ -5077,7 +5186,7 @@ SceneRoots:
   - {fileID: 1416990087}
   - {fileID: 604100036}
   - {fileID: 3347620887782943298}
-  - {fileID: 6901388220747739461}
   - {fileID: 7532210168110180655}
+  - {fileID: 6901388220747739461}
   - {fileID: 3894933160530991721}
   - {fileID: 1946135713}

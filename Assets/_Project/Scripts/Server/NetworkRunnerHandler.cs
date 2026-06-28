@@ -873,6 +873,7 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     public int LobbyReadyPlayerCount => lobbyReadyPlayers.Count;
     public bool IsLobbyRunner => currentRunIsLobby;
     public bool IsClientConnectedToLobby => runner != null && !runner.IsServer && currentRunIsLobby;
+    public bool IsLocalLobbyPlayerControllerReady => IsClientConnectedToLobby && GetLocalPlayerController() != null;
     public string CurrentRoomCode => string.IsNullOrWhiteSpace(currentRoomCode) ? ClientMatchRoomContext.CurrentRoomCode : currentRoomCode;
 
     public string CurrentSessionName
@@ -1517,9 +1518,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
         lobbyReadyPlayers.Remove(player);
 
-        string sessionName = string.IsNullOrWhiteSpace(lobbyMatchSessionName) ? defaultSessionName : lobbyMatchSessionName.Trim();
-        Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} created room code {roomCode}. Sending creator to match session '{sessionName}'.");
-        SendLobbyMatchFound(player, sessionName, roomCode);
+        // Do not send the creator to card selection/match yet. The room owner must stay in the
+        // lobby/menu with a visible Room ID and a working Cancel button until another player joins
+        // the code. Sending only the creator to the match created a 1-player limbo state where the
+        // menu looked frozen and Quick Play could not be pressed again.
+        Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} created room code {roomCode}. Waiting for a joiner before dispatching both players.");
+        SendLobbyCustomRoomCreated(player, roomCode);
         return true;
     }
 
@@ -1547,6 +1551,13 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         LobbyCustomRoomReservation reservation = lobbyCustomRooms[roomCode];
+        if (reservation == null || !connectedPlayers.Contains(reservation.Owner))
+        {
+            lobbyCustomRooms.Remove(roomCode);
+            SendLobbyRoomRequestFailed(player, "Room ID expired. Ask the host to create a new room.");
+            return false;
+        }
+
         if (reservation.Owner == player)
         {
             SendLobbyRoomRequestFailed(player, "You are already the owner of this room.");
@@ -1554,10 +1565,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         lobbyCustomRooms.Remove(roomCode);
+        lobbyReadyPlayers.Remove(reservation.Owner);
         lobbyReadyPlayers.Remove(player);
 
         string sessionName = string.IsNullOrWhiteSpace(lobbyMatchSessionName) ? defaultSessionName : lobbyMatchSessionName.Trim();
-        Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} joined room code {roomCode}. Sending joiner to match session '{sessionName}'.");
+        Debug.Log($"[Lobby CustomRoom] Player {player.PlayerId} joined room code {roomCode}. Sending owner Player {reservation.Owner.PlayerId} and joiner to match session '{sessionName}'.");
+        SendLobbyMatchFound(reservation.Owner, sessionName, roomCode);
         SendLobbyMatchFound(player, sessionName, roomCode);
         return true;
     }
@@ -1712,6 +1725,19 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         controller.ServerSendLobbyMatchFound(sessionName, roomCode);
+    }
+
+    private void SendLobbyCustomRoomCreated(PlayerRef player, string roomCode)
+    {
+        NetworkObject playerObject = runner != null ? runner.GetPlayerObject(player) : null;
+        PlayerNetworkController controller = playerObject != null ? playerObject.GetComponent<PlayerNetworkController>() : null;
+        if (controller == null)
+        {
+            Debug.LogWarning($"[Lobby] Cannot send custom-room-created to Player {player.PlayerId}: PlayerNetworkController missing. RoomCode={roomCode}");
+            return;
+        }
+
+        controller.ServerSendLobbyCustomRoomCreated(roomCode);
     }
 
     private void SendLobbyRoomRequestFailed(PlayerRef player, string message)

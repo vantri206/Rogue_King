@@ -474,21 +474,9 @@ public class ServerCardManager : NetworkBehaviour
             return false;
         }
 
-        if (targetPos.x < 0 || targetPos.y < 0)
+        if (!IsValidSummonCapturedPawnTarget(ChessFaction.ChessRogue, targetPos, out string rejectReason))
         {
-            Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires a board target.");
-            return false;
-        }
-
-        if (ServerBoardManager.Instance.logicBoard == null || !ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y))
-        {
-            Debug.LogWarning($"[Server Card] Card '{data.cardName}' target {targetPos} is invalid.");
-            return false;
-        }
-
-        if (!ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
-        {
-            Debug.LogWarning($"[Server Card] Card '{data.cardName}' target {targetPos} is occupied.");
+            Debug.LogWarning($"[Server Card] Card '{data.cardName}' rejected summon target {targetPos}: {rejectReason}");
             return false;
         }
 
@@ -503,6 +491,61 @@ public class ServerCardManager : NetworkBehaviour
         }
 
         return ServerBoardManager.Instance.TrySpawnRuntimePiece(pawnData, targetPos, ChessFaction.ChessRogue);
+    }
+
+    private bool IsValidSummonCapturedPawnTarget(ChessFaction kingFaction, Vector2Int targetPos, out string rejectReason)
+    {
+        rejectReason = string.Empty;
+
+        if (ServerBoardManager.Instance == null || ServerBoardManager.Instance.logicBoard == null)
+        {
+            rejectReason = "server board is not ready";
+            return false;
+        }
+
+        if (kingFaction != ChessFaction.ChessRogue)
+        {
+            rejectReason = $"SummonCapturedPawn is Rogue King only, but faction={kingFaction}";
+            return false;
+        }
+
+        if (targetPos.x < 0 || targetPos.y < 0)
+        {
+            rejectReason = "missing board target";
+            return false;
+        }
+
+        BoardData board = ServerBoardManager.Instance.logicBoard;
+        if (!board.IsValidPosition(targetPos.x, targetPos.y))
+        {
+            rejectReason = "target is outside the board";
+            return false;
+        }
+
+        ChessPieceRuntime kingRuntime = FindKingRuntime(kingFaction);
+        if (kingRuntime == null || kingRuntime.baseData == null || !kingRuntime.baseData.pieceName.Contains("King"))
+        {
+            rejectReason = "cannot find Rogue King on board";
+            return false;
+        }
+
+        Vector2Int delta = targetPos - kingRuntime.currentGridPosition;
+        int absX = Mathf.Abs(delta.x);
+        int absY = Mathf.Abs(delta.y);
+        bool isOneOfEightNeighborTiles = (absX <= 1 && absY <= 1 && (absX + absY) > 0);
+        if (!isOneOfEightNeighborTiles)
+        {
+            rejectReason = $"target is not in the 8 tiles around the Rogue King at {kingRuntime.currentGridPosition}";
+            return false;
+        }
+
+        if (!board.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
+        {
+            rejectReason = "target is occupied; summon requires an empty tile with no enemy and no friendly piece";
+            return false;
+        }
+
+        return true;
     }
 
     private void ForEachFriendlyPiece(ChessFaction faction, string requiredNamePart, System.Action<ChessPieceRuntime, NetworkChessPiece> action)
@@ -555,14 +598,7 @@ public class ServerCardManager : NetworkBehaviour
 
         if (data.effectType == CardEffectType.SummonCapturedPawn)
         {
-            if (targetPos.x < 0 || targetPos.y < 0)
-                return false;
-
-            return ServerBoardManager.Instance != null &&
-                   ServerBoardManager.Instance.logicBoard != null &&
-                   ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y) &&
-                   ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) &&
-                   ServerBoardManager.Instance.GetPieceAt(targetPos) == null;
+            return IsValidSummonCapturedPawnTarget(myFaction, targetPos, out _);
         }
 
         if (data.effectType == CardEffectType.KingRevive)

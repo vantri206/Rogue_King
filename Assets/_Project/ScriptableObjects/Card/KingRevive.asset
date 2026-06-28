@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: King Revive
   cardArtwork: {fileID: -6248620771753620023, guid: 949075a27996e9549b8a06654cae3c09, type: 3}
-  cardDescription: "H\u1ED3i sinh 1 qu\xE2n phe m\xECnh,\\"
+  cardDescription: "H\u1ED3i sinh 1 qu\xE2n phe m\xECnh."
   cardRole: 1
   effectType: 3
   requiredTargetName: 

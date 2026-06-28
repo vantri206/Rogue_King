@@ -37,6 +37,15 @@ public class MatchmakingMenuUI : MonoBehaviour
     [Tooltip("If no match-found RPC arrives in this many seconds, re-enable the Play button and show a useful status instead of waiting forever.")]
     [SerializeField] private float lobbyMatchmakingTimeoutSeconds = 20f;
 
+    [Tooltip("How long a created Room ID can stay waiting in the menu before the client auto-cancels the reservation.")]
+    [SerializeField] private float customRoomWaitTimeoutSeconds = 180f;
+
+    [Tooltip("After connecting to the lobby session, wait briefly for the local PlayerNetworkController to spawn before sending Play/Create/Join RPCs. This avoids the first click being lost and needing Cancel -> Play again.")]
+    [SerializeField] private float localLobbyPlayerObjectWaitTimeoutSeconds = 5f;
+
+    [Tooltip("If another lobby connect operation is already running from Start(), button clicks wait this long for it instead of failing immediately.")]
+    [SerializeField] private float lobbyConnectInProgressWaitTimeoutSeconds = 8f;
+
     [Tooltip("Safety for Play -> Cancel -> Play demo flow: while waiting for quick match, resend the ready request every few seconds. Server-side request serial makes this idempotent and prevents stale cancel RPCs from deleting the newest ready request.")]
     [SerializeField] private bool autoReassertQuickMatchWhileWaiting = true;
 
@@ -47,6 +56,8 @@ public class MatchmakingMenuUI : MonoBehaviour
     private bool currentLobbyWaitIsQuickMatch;
     private Coroutine lobbyWaitTimeoutCoroutine;
     private Coroutine quickMatchReassertCoroutine;
+    private int lobbyUiOperationSerial;
+    private bool roomCodeWasAutoFilledByCreatedRoom;
 
     private void Awake()
     {
@@ -167,9 +178,14 @@ public class MatchmakingMenuUI : MonoBehaviour
 
     public void CancelLobbySearchFromMenu(string statusMessage = "Đã hủy tìm trận.")
     {
+        AdvanceLobbyUiOperationSerial();
         StopLobbyWaitTimeout();
         StopQuickMatchReassert();
         currentLobbyWaitIsQuickMatch = false;
+
+        if (roomCodeWasAutoFilledByCreatedRoom && roomCodeInput != null)
+            roomCodeInput.text = string.Empty;
+        roomCodeWasAutoFilledByCreatedRoom = false;
 
         ResolveRunnerHandler();
         if (runnerHandler != null)
@@ -210,14 +226,21 @@ public class MatchmakingMenuUI : MonoBehaviour
             return true;
         }
 
+        if (lobbyConnectInProgress)
+        {
+            float waitTimeout = Mathf.Max(0.5f, lobbyConnectInProgressWaitTimeoutSeconds);
+            float startTime = Time.realtimeSinceStartup;
+            while (lobbyConnectInProgress && Time.realtimeSinceStartup - startTime < waitTimeout)
+                await Task.Yield();
+
+            return runnerHandler != null && runnerHandler.IsClientConnectedToLobby;
+        }
+
         if (runnerHandler.HasRunnerStarted)
         {
             SetStatus("Runner already started outside lobby.");
             return false;
         }
-
-        if (lobbyConnectInProgress)
-            return false;
 
         lobbyConnectInProgress = true;
         SetStatus("Connecting live leaderboard lobby...");
@@ -262,6 +285,7 @@ public class MatchmakingMenuUI : MonoBehaviour
             return;
         }
 
+        int operationSerial = BeginLobbyUiOperation();
         StopLobbyWaitTimeout();
         StopQuickMatchReassert();
         currentLobbyWaitIsQuickMatch = false;
@@ -271,6 +295,9 @@ public class MatchmakingMenuUI : MonoBehaviour
         if (!runnerHandler.IsClientConnectedToLobby)
         {
             bool connected = await ConnectLobbyForMenuLiveData();
+            if (!IsLobbyUiOperationCurrent(operationSerial))
+                return;
+
             if (!connected)
             {
                 SetStatus("Cannot find match because lobby is not connected.");
@@ -280,12 +307,16 @@ public class MatchmakingMenuUI : MonoBehaviour
             }
         }
 
+        await WaitForLocalLobbyPlayerControllerReady(operationSerial, "Đang chuẩn bị lobby player object trước khi tìm trận...");
+        if (!IsLobbyUiOperationCurrent(operationSerial))
+            return;
+
         currentLobbyWaitIsQuickMatch = true;
         bool requested = runnerHandler.ClientRequestLobbyMatchmaking();
         if (requested)
         {
-            SetStatus("Find-match request sent/queued. Waiting for another ready lobby player...");
-            StartLobbyWaitTimeout();
+            SetStatus("Đang tìm trận... chờ người chơi khác bấm Play.");
+            StartLobbyWaitTimeout(lobbyMatchmakingTimeoutSeconds);
             StartQuickMatchReassert();
         }
         else
@@ -306,6 +337,7 @@ public class MatchmakingMenuUI : MonoBehaviour
             return;
         }
 
+        int operationSerial = BeginLobbyUiOperation();
         StopLobbyWaitTimeout();
         StopQuickMatchReassert();
         currentLobbyWaitIsQuickMatch = false;
@@ -315,6 +347,9 @@ public class MatchmakingMenuUI : MonoBehaviour
         if (!runnerHandler.IsClientConnectedToLobby)
         {
             bool connected = await ConnectLobbyForMenuLiveData();
+            if (!IsLobbyUiOperationCurrent(operationSerial))
+                return;
+
             if (!connected)
             {
                 SetStatus("Cannot create room because lobby is not connected.");
@@ -324,11 +359,15 @@ public class MatchmakingMenuUI : MonoBehaviour
             }
         }
 
+        await WaitForLocalLobbyPlayerControllerReady(operationSerial, "Đang chuẩn bị lobby player object trước khi tạo Room ID...");
+        if (!IsLobbyUiOperationCurrent(operationSerial))
+            return;
+
         bool requested = runnerHandler.ClientRequestCreateCustomRoom();
         if (requested)
         {
             SetStatus("Creating room...");
-            StartLobbyWaitTimeout();
+            StartLobbyWaitTimeout(customRoomWaitTimeoutSeconds);
         }
         else
         {
@@ -351,6 +390,7 @@ public class MatchmakingMenuUI : MonoBehaviour
         StopLobbyWaitTimeout();
         StopQuickMatchReassert();
         currentLobbyWaitIsQuickMatch = false;
+        roomCodeWasAutoFilledByCreatedRoom = false;
         roomCode = SanitizeRoomCode(roomCode);
         if (string.IsNullOrWhiteSpace(roomCode))
         {
@@ -358,12 +398,16 @@ public class MatchmakingMenuUI : MonoBehaviour
             return;
         }
 
+        int operationSerial = BeginLobbyUiOperation();
         isMatchmaking = true;
         SetInteractable(false);
 
         if (!runnerHandler.IsClientConnectedToLobby)
         {
             bool connected = await ConnectLobbyForMenuLiveData();
+            if (!IsLobbyUiOperationCurrent(operationSerial))
+                return;
+
             if (!connected)
             {
                 SetStatus("Cannot join room because lobby is not connected.");
@@ -373,11 +417,15 @@ public class MatchmakingMenuUI : MonoBehaviour
             }
         }
 
+        await WaitForLocalLobbyPlayerControllerReady(operationSerial, "Đang chuẩn bị lobby player object trước khi join Room ID...");
+        if (!IsLobbyUiOperationCurrent(operationSerial))
+            return;
+
         bool requested = runnerHandler.ClientRequestJoinCustomRoom(roomCode);
         if (requested)
         {
             SetStatus($"Checking Room ID {roomCode}...");
-            StartLobbyWaitTimeout();
+            StartLobbyWaitTimeout(lobbyMatchmakingTimeoutSeconds);
         }
         else
         {
@@ -390,6 +438,7 @@ public class MatchmakingMenuUI : MonoBehaviour
 
     public void NotifyPreMatchCardSelectionOpened()
     {
+        AdvanceLobbyUiOperationSerial();
         StopLobbyWaitTimeout();
         StopQuickMatchReassert();
         currentLobbyWaitIsQuickMatch = false;
@@ -399,14 +448,40 @@ public class MatchmakingMenuUI : MonoBehaviour
         SetStatus("Match found. Choose your cards, then press Fight!");
     }
 
+    public void ShowLobbyRoomCreated(string roomCode)
+    {
+        roomCode = SanitizeRoomCode(roomCode);
+
+        StopQuickMatchReassert();
+        currentLobbyWaitIsQuickMatch = false;
+        isMatchmaking = true;
+        SetInteractable(false);
+
+        if (roomCodeInput != null)
+            roomCodeInput.text = roomCode;
+        roomCodeWasAutoFilledByCreatedRoom = true;
+
+        SetStatus(string.IsNullOrWhiteSpace(roomCode)
+            ? "Room created. Waiting for another player to join by code..."
+            : $"Room ID: {roomCode}. Gửi mã này cho người chơi thứ 2. Có thể bấm Cancel để hủy phòng.");
+
+        StartLobbyWaitTimeout(customRoomWaitTimeoutSeconds);
+    }
+
     public void ShowLobbyRoomError(string message)
     {
+        AdvanceLobbyUiOperationSerial();
+
         if (string.IsNullOrWhiteSpace(message))
             message = "Sai Room ID";
 
         SetStatus(message);
         SetInteractable(true);
         isMatchmaking = false;
+
+        if (roomCodeWasAutoFilledByCreatedRoom && roomCodeInput != null)
+            roomCodeInput.text = string.Empty;
+        roomCodeWasAutoFilledByCreatedRoom = false;
 
         StopLobbyWaitTimeout();
         StopQuickMatchReassert();
@@ -455,11 +530,11 @@ public class MatchmakingMenuUI : MonoBehaviour
         quickMatchReassertCoroutine = null;
     }
 
-    private void StartLobbyWaitTimeout()
+    private void StartLobbyWaitTimeout(float timeoutSeconds)
     {
         StopLobbyWaitTimeout();
 
-        float timeout = Mathf.Max(5f, lobbyMatchmakingTimeoutSeconds);
+        float timeout = Mathf.Max(5f, timeoutSeconds);
         lobbyWaitTimeoutCoroutine = StartCoroutine(LobbyWaitTimeoutRoutine(timeout));
     }
 
@@ -494,7 +569,7 @@ public class MatchmakingMenuUI : MonoBehaviour
             runnerHandler.ClientCancelLobbyMatchmaking();
             StopQuickMatchReassert();
             currentLobbyWaitIsQuickMatch = false;
-            SetStatus("Không ghép được trận trong thời gian chờ. Đã hủy request cũ, hãy bấm Play lại ở cả 2 client.");
+            SetStatus("Hết thời gian chờ lobby. Đã hủy request/phòng cũ, bạn có thể bấm Play hoặc Create Room lại ngay.");
             SetInteractable(true);
             isMatchmaking = false;
         }
@@ -587,6 +662,51 @@ public class MatchmakingMenuUI : MonoBehaviour
             SetInteractable(true);
             isMatchmaking = false;
         }
+    }
+
+    private int BeginLobbyUiOperation()
+    {
+        AdvanceLobbyUiOperationSerial();
+        return lobbyUiOperationSerial;
+    }
+
+    private void AdvanceLobbyUiOperationSerial()
+    {
+        lobbyUiOperationSerial++;
+        if (lobbyUiOperationSerial <= 0)
+            lobbyUiOperationSerial = 1;
+    }
+
+    private bool IsLobbyUiOperationCurrent(int operationSerial)
+    {
+        return operationSerial == lobbyUiOperationSerial && isMatchmaking;
+    }
+
+    private async Task<bool> WaitForLocalLobbyPlayerControllerReady(int operationSerial, string waitingStatus)
+    {
+        ResolveRunnerHandler();
+
+        if (runnerHandler == null || !runnerHandler.IsClientConnectedToLobby)
+            return false;
+
+        if (runnerHandler.IsLocalLobbyPlayerControllerReady)
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(waitingStatus))
+            SetStatus(waitingStatus);
+
+        float timeout = Mathf.Max(0.25f, localLobbyPlayerObjectWaitTimeoutSeconds);
+        float startTime = Time.realtimeSinceStartup;
+        while (IsLobbyUiOperationCurrent(operationSerial) &&
+               runnerHandler != null &&
+               runnerHandler.IsClientConnectedToLobby &&
+               !runnerHandler.IsLocalLobbyPlayerControllerReady &&
+               Time.realtimeSinceStartup - startTime < timeout)
+        {
+            await Task.Yield();
+        }
+
+        return runnerHandler != null && runnerHandler.IsClientConnectedToLobby && runnerHandler.IsLocalLobbyPlayerControllerReady;
     }
 
     private void SetInteractable(bool interactable)
