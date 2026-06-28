@@ -514,7 +514,9 @@ public class ServerCardManager : NetworkBehaviour
             for (int y = 0; y < board.height; y++)
             {
                 var runtime = board.GetEntityAt<ChessPieceRuntime>(x, y);
-                if (runtime != null && runtime.faction == faction && (string.IsNullOrEmpty(requiredNamePart) || runtime.baseData.pieceName.Contains(requiredNamePart)))
+                // Quét faction đồng minh. Bỏ qua phân biệt hoa/thường khi kiểm tra tên (Pawn, pawn, PAWN đều nhận)
+                if (runtime != null && runtime.faction == faction &&
+                    (string.IsNullOrEmpty(requiredNamePart) || runtime.baseData.pieceName.ToLower().Contains(requiredNamePart.ToLower())))
                 {
                     var netPiece = ServerBoardManager.Instance.GetPieceAt(new Vector2Int(x, y));
                     action?.Invoke(runtime, netPiece);
@@ -565,14 +567,13 @@ public class ServerCardManager : NetworkBehaviour
                    ServerBoardManager.Instance.GetPieceAt(targetPos) == null;
         }
 
-        if (data.effectType == CardEffectType.KingRevive)
+        // ---> SỬA Ở ĐÂY: Nếu thẻ không cần target trên bàn cờ, lập tức Pass qua luôn, không kiểm tra tọa độ nữa!
+        if (!DoesCardNeedBoardTarget(data))
         {
-            return FindKingReviveRecordAtTarget(targetPos) != null;
+            return true;
         }
 
-        if (!DoesCardNeedBoardTarget(data))
-            return true;
-
+        // Từ đây trở xuống là dành cho thẻ BẮT BUỘC có target
         if (targetPos.x < 0 || targetPos.y < 0)
         {
             Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires a board target, but client sent no target.");
@@ -581,13 +582,6 @@ public class ServerCardManager : NetworkBehaviour
 
         if (ServerBoardManager.Instance == null)
             return false;
-
-        if (data.effectType == CardEffectType.KingDash)
-        {
-            ChessPieceRuntime kingRuntime = FindKingRuntime(myFaction);
-            int range = Mathf.Max(1, data.effectValue1 <= 0 ? 3 : data.effectValue1);
-            return kingRuntime != null && IsValidKingDashTarget(kingRuntime.currentGridPosition, targetPos, range);
-        }
 
         ChessPieceRuntime targetRuntime = ServerBoardManager.Instance.GetRuntimeAt(targetPos);
         if (targetRuntime == null || targetRuntime.baseData == null)
