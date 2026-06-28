@@ -58,6 +58,19 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
     [Tooltip("If true, server scene can be different from client PlayScene as long as both builds keep the same gameplay scene index and do not rely on mismatched scene NetworkObjects.")]
     [SerializeField] private bool allowSeparateServerSceneAtSameBuildIndex = true;
 
+    [Header("Local Rematch Cleanup")]
+    [Tooltip("Client-side safety cleanup. Before joining a new match, destroy any lingering PlayScene board/piece visuals left from the previous match.")]
+    [SerializeField] private bool cleanupOldPlaySceneResidueBeforeJoiningMatch = true;
+
+    [Tooltip("Client-side safety cleanup. Before loading MenuScene after a match, destroy local board/piece visuals so game 2 cannot stack over game 1.")]
+    [SerializeField] private bool cleanupOldPlaySceneResidueBeforeMenuLoad = true;
+
+    [Tooltip("Also destroy lingering NetworkChessPiece visuals during local cleanup after runner shutdown.")]
+    [SerializeField] private bool cleanupLingeringNetworkPieces = true;
+
+    [Tooltip("If true, logs how many local leftover objects were removed before rematch/menu cleanup.")]
+    [SerializeField] private bool logLocalRematchCleanup = true;
+
     [Tooltip("Prefix used by generated server session names when -uniqueSession is supplied.")]
     [SerializeField] private string generatedSessionPrefix = "RogueKingRoom";
 
@@ -92,6 +105,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
 
     [Tooltip("Lobby custom room reservations expire after this many seconds if nobody joins by code. This prevents stale codes from blocking quick match forever.")]
     [SerializeField] private float customRoomReservationLifetimeSeconds = 180f;
+
+    [Tooltip("Safety for demo/rematch flow: a fresh Quick Play request removes stale custom-room reservations owned by that player.")]
+    [SerializeField] private bool quickPlayClearsOwnWaitingCustomRoom = true;
+
+    [Tooltip("Safety for demo/rematch flow: if two players press Quick Play while a stale custom-room reservation is still waiting, clear that reservation instead of blocking matchmaking forever.")]
+    [SerializeField] private bool quickPlayCanOverrideWaitingCustomRooms = true;
 
     [Header("Editor / ParrelSync Test")]
     [Tooltip("Auto mode: the original Editor becomes the dedicated server; ParrelSync clones become clients.")]
@@ -626,6 +645,12 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             yield return new WaitForSecondsRealtime(joinDelay);
         else
             yield return null;
+
+        if (cleanupOldPlaySceneResidueBeforeJoiningMatch)
+        {
+            CleanupLocalPlaySceneResidue("before joining next match");
+            yield return null;
+        }
 
         Debug.Log($"[Lobby] Starting match client runner. Session='{matchSessionName}'.");
 
@@ -1373,16 +1398,17 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return false;
         }
 
-        if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
-        {
-            SendLobbyRoomRequestFailed(player, "A custom room is waiting. Join by Room ID or wait until it expires.");
-            return false;
-        }
+        // A player can press Create Room, cancel, hit timeout, return from card selection, or rematch.
+        // In all of those cases, a fresh Quick Play should be treated as a clean new lobby intent.
+        if (quickPlayClearsOwnWaitingCustomRoom)
+            RemoveCustomRoomsOwnedBy(player, "fresh quick-play request");
 
-        if (!lobbyReadyPlayers.Contains(player))
-            lobbyReadyPlayers.Add(player);
+        // Keep the ready queue idempotent. Re-pressing Play should never leave the player stuck in
+        // an old slot that prevents TryDispatchLobbyMatch from running again.
+        lobbyReadyPlayers.Remove(player);
+        lobbyReadyPlayers.Add(player);
 
-        Debug.Log($"[Lobby] Player {player.PlayerId} is ready. Ready={lobbyReadyPlayers.Count}/2, Connected={connectedPlayers.Count}/{maxPlayers}");
+        Debug.Log($"[Lobby] Player {player.PlayerId} is ready. Ready={lobbyReadyPlayers.Count}/2, Connected={connectedPlayers.Count}/{maxPlayers}, CustomRooms={lobbyCustomRooms.Count}");
         TryDispatchLobbyMatch();
         return true;
     }
@@ -1399,6 +1425,10 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             Debug.LogWarning($"[Lobby] Ignored custom-room create request from non-connected Player {player.PlayerId}.");
             return false;
         }
+
+        // Re-clicking Create Room after a failed/cancelled attempt should not leave an old room
+        // reservation owned by the same player that blocks the UI forever.
+        RemoveCustomRoomsOwnedBy(player, "new create-room request");
 
         if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
         {
@@ -1457,6 +1487,35 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         return true;
     }
 
+    private int RemoveCustomRoomsOwnedBy(PlayerRef player, string reason)
+    {
+        if (player == PlayerRef.None || lobbyCustomRooms.Count == 0)
+            return 0;
+
+        List<string> ownedRoomCodes = null;
+        foreach (var kvp in lobbyCustomRooms)
+        {
+            if (kvp.Value != null && kvp.Value.Owner == player)
+            {
+                if (ownedRoomCodes == null)
+                    ownedRoomCodes = new List<string>();
+
+                ownedRoomCodes.Add(kvp.Key);
+            }
+        }
+
+        if (ownedRoomCodes == null || ownedRoomCodes.Count == 0)
+            return 0;
+
+        for (int i = 0; i < ownedRoomCodes.Count; i++)
+        {
+            lobbyCustomRooms.Remove(ownedRoomCodes[i]);
+            Debug.Log($"[Lobby CustomRoom] Removed room code {ownedRoomCodes[i]} owned by Player {player.PlayerId}. Reason={reason}.");
+        }
+
+        return ownedRoomCodes.Count;
+    }
+
     public bool ServerPlayerCancelledLobbyRequest(PlayerRef player)
     {
         if (runner == null || !runner.IsServer || !currentRunIsLobby)
@@ -1467,22 +1526,8 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         if (lobbyReadyPlayers.Remove(player))
             changed = true;
 
-        if (lobbyCustomRooms.Count > 0)
-        {
-            List<string> ownedRoomCodes = new List<string>();
-            foreach (var kvp in lobbyCustomRooms)
-            {
-                if (kvp.Value != null && kvp.Value.Owner == player)
-                    ownedRoomCodes.Add(kvp.Key);
-            }
-
-            for (int i = 0; i < ownedRoomCodes.Count; i++)
-            {
-                lobbyCustomRooms.Remove(ownedRoomCodes[i]);
-                changed = true;
-                Debug.Log($"[Lobby CustomRoom] Removed cancelled room code {ownedRoomCodes[i]} owned by Player {player.PlayerId}.");
-            }
-        }
+        if (RemoveCustomRoomsOwnedBy(player, "cancel request") > 0)
+            changed = true;
 
         Debug.Log($"[Lobby] Player {player.PlayerId} cancelled lobby matchmaking/custom-room request. Changed={changed}. Ready={lobbyReadyPlayers.Count}, CustomRooms={lobbyCustomRooms.Count}");
         return true;
@@ -1508,14 +1553,24 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
             return;
 
         PruneExpiredCustomRooms();
-
-        if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
-            return;
-
         lobbyReadyPlayers.RemoveAll(player => !connectedPlayers.Contains(player));
 
         if (lobbyReadyPlayers.Count < 2)
             return;
+
+        if (blockQuickMatchWhileCustomRoomIsWaiting && lobbyCustomRooms.Count > 0)
+        {
+            if (quickPlayCanOverrideWaitingCustomRooms)
+            {
+                Debug.LogWarning($"[Lobby] Quick Play has 2 ready players but {lobbyCustomRooms.Count} custom room reservation(s) are still waiting. Clearing stale reservations so matchmaking can continue.");
+                lobbyCustomRooms.Clear();
+            }
+            else
+            {
+                Debug.LogWarning($"[Lobby] Quick Play is blocked by {lobbyCustomRooms.Count} waiting custom room reservation(s). Ready={lobbyReadyPlayers.Count}/2.");
+                return;
+            }
+        }
 
         PlayerRef p1 = lobbyReadyPlayers[0];
         PlayerRef p2 = lobbyReadyPlayers[1];
@@ -1824,11 +1879,141 @@ public class NetworkRunnerHandler : MonoBehaviour, INetworkRunnerCallbacks
         ClientMatchRoomContext.Clear();
         runtimeSessionOverride = null;
 
+        if (cleanupOldPlaySceneResidueBeforeMenuLoad)
+        {
+            CleanupLocalPlaySceneResidue("before loading menu after match");
+            yield return null;
+        }
+
         int sceneIndex = Mathf.Max(0, menuSceneBuildIndex);
         SceneManager.LoadScene(sceneIndex, LoadSceneMode.Single);
 
         yield return null;
         clientReturnToMenuQueued = false;
+    }
+
+    private void CleanupLocalPlaySceneResidue(string reason)
+    {
+        // This method is client/local visual cleanup only. It is intentionally called only while
+        // leaving a match or before joining the next match, never during active gameplay.
+        int destroyedBoards = 0;
+        int clearedBoards = 0;
+        int destroyedTiles = 0;
+        int destroyedLocalPieces = 0;
+        int destroyedNetworkPieces = 0;
+
+        HashSet<GameObject> destroyed = new HashSet<GameObject>();
+
+        ChessBoard[] boards = FindObjectsByType<ChessBoard>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < boards.Length; i++)
+        {
+            ChessBoard board = boards[i];
+            if (board == null)
+                continue;
+
+            if (!ShouldCleanupSceneObject(board.gameObject))
+                continue;
+
+            board.ClearRuntimeVisualChildren();
+            clearedBoards++;
+
+            GameObject boardObject = board.gameObject;
+            if (boardObject != null && destroyed.Add(boardObject))
+            {
+                DestroyObjectSafe(boardObject);
+                destroyedBoards++;
+            }
+        }
+
+        BoardTile[] tiles = FindObjectsByType<BoardTile>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            BoardTile tile = tiles[i];
+            if (tile == null || tile.gameObject == null)
+                continue;
+
+            if (!ShouldCleanupSceneObject(tile.gameObject))
+                continue;
+
+            if (destroyed.Add(tile.gameObject))
+            {
+                DestroyObjectSafe(tile.gameObject);
+                destroyedTiles++;
+            }
+        }
+
+        ChessPiece[] localPieces = FindObjectsByType<ChessPiece>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < localPieces.Length; i++)
+        {
+            ChessPiece piece = localPieces[i];
+            if (piece == null || piece.gameObject == null)
+                continue;
+
+            if (!ShouldCleanupSceneObject(piece.gameObject))
+                continue;
+
+            if (destroyed.Add(piece.gameObject))
+            {
+                DestroyObjectSafe(piece.gameObject);
+                destroyedLocalPieces++;
+            }
+        }
+
+        if (cleanupLingeringNetworkPieces)
+        {
+            NetworkChessPiece[] networkPieces = FindObjectsByType<NetworkChessPiece>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < networkPieces.Length; i++)
+            {
+                NetworkChessPiece piece = networkPieces[i];
+                if (piece == null || piece.gameObject == null)
+                    continue;
+
+                if (!ShouldCleanupSceneObject(piece.gameObject))
+                    continue;
+
+                if (destroyed.Add(piece.gameObject))
+                {
+                    DestroyObjectSafe(piece.gameObject);
+                    destroyedNetworkPieces++;
+                }
+            }
+        }
+
+        if (logLocalRematchCleanup && (destroyedBoards > 0 || clearedBoards > 0 || destroyedTiles > 0 || destroyedLocalPieces > 0 || destroyedNetworkPieces > 0))
+        {
+            Debug.Log(
+                $"[Client Rematch Cleanup] {reason}: " +
+                $"clearedBoards={clearedBoards}, destroyedBoards={destroyedBoards}, " +
+                $"orphanTiles={destroyedTiles}, localPieces={destroyedLocalPieces}, networkPieces={destroyedNetworkPieces}."
+            );
+        }
+    }
+
+    private bool ShouldCleanupSceneObject(GameObject obj)
+    {
+        if (obj == null)
+            return false;
+
+        Scene objScene = obj.scene;
+
+        // Do not destroy normal objects that belong to the MenuScene, because the player may be in
+        // the lobby/menu when preparing the next match. Old PlayScene residue is either in the
+        // gameplay scene or in the DontDestroyOnLoad scene with buildIndex < 0.
+        if (objScene.IsValid() && objScene.buildIndex == menuSceneBuildIndex)
+            return false;
+
+        return true;
+    }
+
+    private static void DestroyObjectSafe(GameObject obj)
+    {
+        if (obj == null)
+            return;
+
+        if (!Application.isPlaying)
+            DestroyImmediate(obj);
+        else
+            Destroy(obj);
     }
 
     public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
