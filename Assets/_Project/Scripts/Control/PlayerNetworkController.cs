@@ -439,6 +439,15 @@ public class PlayerNetworkController : NetworkBehaviour
         Rpc_LobbyMatchFound(safeSession, safeRoomCode);
     }
 
+    public void ServerSendLobbyCustomRoomCreated(string roomCode)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        string safeRoomCode = SanitizeRoomCode(roomCode);
+        Rpc_LobbyCustomRoomCreated(safeRoomCode);
+    }
+
     public void ServerSendLobbyRoomRequestFailed(string message)
     {
         if (!HasStateAuthority)
@@ -459,6 +468,17 @@ public class PlayerNetworkController : NetworkBehaviour
         ClientMatchRoomContext.SetRoomCode(code);
         if (NetworkRunnerHandler.Active != null)
             NetworkRunnerHandler.Active.ClientSwitchFromLobbyToMatchSession(session, code);
+    }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+    private void Rpc_LobbyCustomRoomCreated(NetworkString<_32> roomCode)
+    {
+        string code = SanitizeRoomCode(roomCode.ToString());
+        MatchmakingMenuUI menu = FindFirstObjectByType<MatchmakingMenuUI>(FindObjectsInactive.Include);
+        if (menu != null)
+            menu.ShowLobbyRoomCreated(code);
+        else
+            Debug.Log($"[Lobby] Custom room created: {code}");
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
