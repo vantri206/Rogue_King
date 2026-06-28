@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: King
   baseAttack: 1
-  baseHealth: 99
+  baseHealth: 100
   moveType: 0
   maxMoveRange: 1
   pawnForwardDirection: {x: 1, y: 0}

@@ -42,11 +42,11 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  cooldownTurns: 6
+  cooldownTurns: 4
   specialType: 1
   hiddenMineRequireEmptyTarget: 1
   hiddenMineDamage: 0
-  hiddenMineAOERange: 0
+  hiddenMineAOERange: 1
   hiddenMineExplosionPrefab: {fileID: 6834287514670173504, guid: cfe435b9b7180d44cbb7bd63e9b0f163, type: 3}
   hiddenMineExplosionSfx: {fileID: 8300000, guid: d5238ccbd74cd8343aafbe93fcf5f045, type: 3}
   targetingPattern:

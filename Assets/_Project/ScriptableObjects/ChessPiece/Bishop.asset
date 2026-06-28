@@ -14,9 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Bishop
   baseAttack: 15
-  baseHealth: 15
+  baseHealth: 20
   moveType: 0
   maxMoveRange: 20
+  pawnForwardDirection: {x: 1, y: 0}
+  mirrorPawnForwardForRogueFaction: 0
   pieceSprite: {fileID: 6683977692621577339, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
   pieceAnimator: {fileID: 22100000, guid: f35f76c6037635e46a356e931d633bc6, type: 2}
   movePatternGrid: 00000000000001000100000000000000010001000000000000

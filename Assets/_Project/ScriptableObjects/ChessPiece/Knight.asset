@@ -14,9 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChessPieceData
   pieceName: Knight
   baseAttack: 1
-  baseHealth: 15
+  baseHealth: 20
   moveType: 1
   maxMoveRange: 1
+  pawnForwardDirection: {x: 1, y: 0}
+  mirrorPawnForwardForRogueFaction: 0
   pieceSprite: {fileID: 4935342009188158166, guid: 6d78ad3000f1d134d8685adc2adbf5ea, type: 3}
   pieceAnimator: {fileID: 22100000, guid: 083f9230277995745b1a1b67a93be6de, type: 2}
   movePatternGrid: 00010001000100000001000000000001000000010001000100

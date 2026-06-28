@@ -17,7 +17,7 @@ MonoBehaviour:
   cardRole: 1
   effectType: 8
   requiredTargetName: 
-  baseCooldown: 2
+  baseCooldown: 1
   maxUses: 1
   effectValue1: 1
   effectValue2: 5

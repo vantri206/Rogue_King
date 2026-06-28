@@ -42,7 +42,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  cooldownTurns: 3
+  cooldownTurns: 1
   specialType: 0
   hiddenMineRequireEmptyTarget: 1
   hiddenMineDamage: 0

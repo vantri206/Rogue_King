@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: SHOTGUN
   weaponIcon: {fileID: -7253108163612337102, guid: b4a779b5114a8a44c8565ae408e7e8e6, type: 3}
-  baseDamage: 20
+  baseDamage: 10
   defaultEffectType: 0
   isDirectional: 1
   isOriginRelative: 1
