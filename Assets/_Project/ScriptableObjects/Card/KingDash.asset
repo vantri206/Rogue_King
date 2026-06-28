@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: King Dash
   cardArtwork: {fileID: 4300792475802372886, guid: babaf541bc68a3e48a81cb558ddf42a5, type: 3}
+  cardDescription: "L\u01B0\u1EDBt \u0111\u1EBFn \xF4 ch\u1EC9 \u0111\u1ECBnh."
   cardRole: 0
   effectType: 5
   requiredTargetName: King

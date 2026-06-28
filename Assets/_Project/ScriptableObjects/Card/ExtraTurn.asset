@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Extra Turn
   cardArtwork: {fileID: 3237626309212567894, guid: 0fa7b9fc1dc8cfc4fb27637ae491bed7, type: 3}
+  cardDescription: "Nh\u1EADn th\xEAm 1 l\u01B0\u1EE3t n\u1EEFa."
   cardRole: 0
   effectType: 7
   requiredTargetName: King

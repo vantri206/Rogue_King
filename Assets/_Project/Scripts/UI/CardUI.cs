@@ -29,6 +29,10 @@ public class CardUI : MonoBehaviour
             cardImage.color = Color.white; // Reset màu chuẩn
         }
 
+        CardDescriptionTooltipTarget tooltip = GetComponent<CardDescriptionTooltipTarget>();
+        if (tooltip == null) tooltip = gameObject.AddComponent<CardDescriptionTooltipTarget>();
+        tooltip.SetCardData(data);
+
         cardButton.onClick.RemoveAllListeners();
         cardButton.onClick.AddListener(() =>
         {

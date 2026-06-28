@@ -313,53 +313,58 @@ public class ServerCardManager : NetworkBehaviour
         if (ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
             return false;
 
-        if (targetPos.x < 0 || targetPos.y < 0)
+        DeadPieceRecord selected = FindKingReviveRecordAtTarget(targetPos);
+        if (selected == null || selected.pieceData == null)
         {
-            Debug.LogWarning($"[Server Card] Card '{data.cardName}' requires an empty board target for revive.");
+            Debug.LogWarning($"[Server Card] KingRevive failed: no valid dead Pawn/Knight/Bishop record at {targetPos}, or the tile is occupied.");
             return false;
         }
-
-        if (ServerBoardManager.Instance.logicBoard == null || !ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y))
-            return false;
-
-        if (!ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
-            return false;
-
-        List<DeadPieceRecord> graveyard = ServerGameManager.Instance.graveyard;
-        if (graveyard == null || graveyard.Count == 0)
-            return false;
-
-        List<int> candidates = new List<int>();
-        for (int i = 0; i < graveyard.Count; i++)
-        {
-            DeadPieceRecord record = graveyard[i];
-            if (record == null || record.pieceData == null)
-                continue;
-
-            // KingRevive hồi sinh ngẫu nhiên 1 quân đã chết thuộc phe hiện tại của người dùng card.
-            if (record.faction == myFaction)
-                candidates.Add(i);
-        }
-
-        if (candidates.Count == 0)
-        {
-            Debug.LogWarning($"[Server Card] Card '{data.cardName}' failed: no friendly dead piece in graveyard for faction={myFaction}.");
-            return false;
-        }
-
-        int selectedListIndex = UnityEngine.Random.Range(0, candidates.Count);
-        int graveyardIndex = candidates[selectedListIndex];
-        DeadPieceRecord selected = graveyard[graveyardIndex];
 
         bool spawned = ServerBoardManager.Instance.TrySpawnRuntimePiece(selected.pieceData, targetPos, selected.faction);
         if (spawned)
         {
-            graveyard.RemoveAt(graveyardIndex);
-            Debug.Log($"[Server Card] KingRevive revived random piece '{selected.pieceData.pieceName}' as {selected.faction} at chosen tile {targetPos}.");
+            ServerGameManager.Instance.RemoveDeadPieceRecord(selected);
+            Debug.Log($"[Server Card] KingRevive revived '{selected.pieceData.pieceName}' as {selected.faction} at its death tile {targetPos}.");
             return true;
         }
 
         return false;
+    }
+
+    private DeadPieceRecord FindKingReviveRecordAtTarget(Vector2Int targetPos)
+    {
+        if (ServerGameManager.Instance == null || ServerBoardManager.Instance == null)
+            return null;
+
+        if (targetPos.x < 0 || targetPos.y < 0)
+            return null;
+
+        BoardData board = ServerBoardManager.Instance.logicBoard;
+        if (board == null || !board.IsValidPosition(targetPos.x, targetPos.y))
+            return null;
+
+        // Không được hồi sinh nếu ô chết đã có quân khác đè lên.
+        if (!board.IsTileEmptyForMovement(targetPos.x, targetPos.y) || ServerBoardManager.Instance.GetPieceAt(targetPos) != null)
+            return null;
+
+        List<DeadPieceRecord> graveyard = ServerGameManager.Instance.graveyard;
+        if (graveyard == null || graveyard.Count == 0)
+            return null;
+
+        // Duyệt từ cuối để nếu có nhiều record cùng ô, hồi sinh quân chết gần nhất tại ô đó.
+        for (int i = graveyard.Count - 1; i >= 0; i--)
+        {
+            DeadPieceRecord record = graveyard[i];
+            if (record == null || record.deathPos != targetPos)
+                continue;
+
+            if (!ServerGameManager.IsKingReviveCandidateRecord(record))
+                continue;
+
+            return record;
+        }
+
+        return null;
     }
 
     private bool TryApplyKingSweep(CardData data, ChessFaction myFaction, ChessPieceRuntime targetRuntime)
@@ -548,7 +553,7 @@ public class ServerCardManager : NetworkBehaviour
         if (data == null)
             return false;
 
-        if (data.effectType == CardEffectType.SummonCapturedPawn || data.effectType == CardEffectType.KingRevive)
+        if (data.effectType == CardEffectType.SummonCapturedPawn)
         {
             if (targetPos.x < 0 || targetPos.y < 0)
                 return false;
@@ -558,6 +563,11 @@ public class ServerCardManager : NetworkBehaviour
                    ServerBoardManager.Instance.logicBoard.IsValidPosition(targetPos.x, targetPos.y) &&
                    ServerBoardManager.Instance.logicBoard.IsTileEmptyForMovement(targetPos.x, targetPos.y) &&
                    ServerBoardManager.Instance.GetPieceAt(targetPos) == null;
+        }
+
+        if (data.effectType == CardEffectType.KingRevive)
+        {
+            return FindKingReviveRecordAtTarget(targetPos) != null;
         }
 
         if (!DoesCardNeedBoardTarget(data))

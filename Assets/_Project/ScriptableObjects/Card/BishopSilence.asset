@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Bishop Silence
   cardArtwork: {fileID: 913314834325009863, guid: 05f4fa2b656b405449d8704d826243d4, type: 3}
+  cardDescription: "Kho\xE1 to\xE0n b\u1ED9 card c\u1EE7a \u0111\u1ED1i ph\u01B0\u01A1ng
+    trong 2 l\u01B0\u1EE3t."
   cardRole: 1
   effectType: 2
   requiredTargetName: 

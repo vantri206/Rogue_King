@@ -268,14 +268,15 @@ public class ServerCombatManager : NetworkBehaviour
             int baseDamageBeforeKingBuff = totalDamage;
             totalDamage = ApplyKingDamageBuffMultiplier(totalDamage, attackerPlayer);
 
-            Rpc_PlayPieceDamageVFX(pos, weaponIndex);
+            int actualHpLoss = CalculateActualHpLoss(targetPiece, totalDamage);
+            Rpc_PlayPieceDamageVFX(pos, weaponIndex, actualHpLoss);
             killedKing = ApplyDamage(targetPiece, totalDamage, attackerPlayer);
 
             string weaponName = usedWeapon != null ? usedWeapon.weaponName : "UnknownWeapon";
             if (totalDamage != baseDamageBeforeKingBuff)
                 Debug.Log($"[Server Combat] King damage buff applied. BaseDamage={baseDamageBeforeKingBuff}, FinalDamage={totalDamage}.");
 
-            Debug.Log($"[Server Combat] Target at {pos} took {totalDamage} damage from weapon {weaponName} after VFX resolved. Piece damage/destroyed VFX spawned.");
+            Debug.Log($"[Server Combat] Target at {pos} took {totalDamage} damage from weapon {weaponName} after VFX resolved. ActualHpLoss={actualHpLoss}. Piece damage/destroyed VFX spawned.");
 
             if (killedKing || ServerGameManager.Instance == null || ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
                 break;
@@ -368,7 +369,8 @@ public class ServerCombatManager : NetworkBehaviour
             if (targetPiece == null || targetPiece.faction != ChessFaction.ChessAlliance)
                 continue;
 
-            Rpc_PlayPieceDamageVFX(pos, mine.WeaponIndex);
+            int actualHpLoss = CalculateActualHpLoss(targetPiece, mine.Damage);
+            Rpc_PlayPieceDamageVFX(pos, mine.WeaponIndex, actualHpLoss);
             ApplyDamage(targetPiece, mine.Damage, mine.Owner);
 
             if (ServerGameManager.Instance.currentGameState != NetGameState.ResolvingAction)
@@ -574,6 +576,23 @@ public class ServerCombatManager : NetworkBehaviour
         return Mathf.Max(1, runtime.kingDamageMultiplier);
     }
 
+    private int CalculateActualHpLoss(NetworkChessPiece targetPiece, int incomingDamage)
+    {
+        if (!HasStateAuthority || targetPiece == null || incomingDamage <= 0) return 0;
+        if (ServerBoardManager.Instance == null) return 0;
+
+        ChessPieceRuntime runtime = ServerBoardManager.Instance.GetRuntimeAt(targetPiece.currentGridPos);
+
+        // Shield blocks HP loss completely, so do not show a red -x popup.
+        if (runtime != null && runtime.hasShield)
+            return 0;
+
+        int currentHp = Mathf.Max(0, targetPiece.currentHp);
+        if (currentHp <= 0) return 0;
+
+        return Mathf.Clamp(incomingDamage, 0, currentHp);
+    }
+
     /// <summary>
     /// Applies damage to a network piece.
     /// Returns true if this damage defeated a king and caused phase/game-state transition.
@@ -646,7 +665,7 @@ public class ServerCombatManager : NetworkBehaviour
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-    private void Rpc_PlayPieceDamageVFX(Vector2Int damagedPos, int weaponIndex)
+    private void Rpc_PlayPieceDamageVFX(Vector2Int damagedPos, int weaponIndex, int actualHpLoss)
     {
         if (Application.isBatchMode)
             return;
@@ -666,10 +685,14 @@ public class ServerCombatManager : NetworkBehaviour
         if (vfxManager == null)
         {
             Debug.LogWarning($"[Client VFX] Missing CombatVFXManager. Cannot play piece damage/destroyed effect at {damagedPos}.");
-            return;
+        }
+        else
+        {
+            vfxManager.PlayDestroyedEffect(usedWeapon, damagedPos, visualBoard);
         }
 
-        vfxManager.PlayDestroyedEffect(usedWeapon, damagedPos, visualBoard);
+        if (actualHpLoss > 0)
+            DamagePopupManager.ShowDamagePopup(damagedPos, actualHpLoss, visualBoard);
     }
 
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
@@ -746,12 +769,7 @@ public class ServerCombatManager : NetworkBehaviour
 
         if (runtime != null && ServerGameManager.Instance != null)
         {
-            ServerGameManager.Instance.graveyard.Add(new DeadPieceRecord
-            {
-                pieceData = runtime.baseData,
-                faction = runtime.faction,
-                deathPos = deathPos
-            });
+            ServerGameManager.Instance.AddDeadPieceToGraveyard(runtime.baseData, runtime.faction, deathPos);
         }
 
         ServerBoardManager.Instance.RemovePieceAt(deathPos);

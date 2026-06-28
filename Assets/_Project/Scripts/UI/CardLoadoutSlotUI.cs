@@ -43,6 +43,10 @@ public class CardLoadoutSlotUI : MonoBehaviour, IDropHandler, IPointerClickHandl
 
         if (indexText != null)
             indexText.text = (slotIndex + 1).ToString();
+
+        CardDescriptionTooltipTarget tooltip = GetComponent<CardDescriptionTooltipTarget>();
+        if (tooltip == null) tooltip = gameObject.AddComponent<CardDescriptionTooltipTarget>();
+        tooltip.SetCardData(cardData);
     }
 
     public void Clear()
@@ -61,6 +65,10 @@ public class CardLoadoutSlotUI : MonoBehaviour, IDropHandler, IPointerClickHandl
 
         if (indexText != null)
             indexText.text = (slotIndex + 1).ToString();
+
+        CardDescriptionTooltipTarget tooltip = GetComponent<CardDescriptionTooltipTarget>();
+        if (tooltip == null) tooltip = gameObject.AddComponent<CardDescriptionTooltipTarget>();
+        tooltip.SetCardData(cardData);
     }
 
     public void OnDrop(PointerEventData eventData)

@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Summon Captured Pawn
   cardArtwork: {fileID: -2790212338442432957, guid: 199c66ad10ec186429dbe992931e9dff, type: 3}
+  cardDescription: "Tri\u1EC7u h\u1ED3i 1 qu\xE2n t\u1ED1t."
   cardRole: 0
   effectType: 11
   requiredTargetName: King

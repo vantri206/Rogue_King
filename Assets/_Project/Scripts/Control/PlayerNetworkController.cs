@@ -2500,9 +2500,15 @@ public class PlayerNetworkController : NetworkBehaviour
         if (myFaction == ChessFaction.Neutral)
             return result;
 
-        if (data.effectType == CardEffectType.SummonCapturedPawn || data.effectType == CardEffectType.KingRevive)
+        if (data.effectType == CardEffectType.SummonCapturedPawn)
         {
             AddAllEmptyBoardTiles(result);
+            return result;
+        }
+
+        if (data.effectType == CardEffectType.KingRevive)
+        {
+            AddKingReviveGraveyardTargetTiles(result);
             return result;
         }
 
@@ -2679,6 +2685,41 @@ public class PlayerNetworkController : NetworkBehaviour
         }
 
         return result;
+    }
+
+    private void AddKingReviveGraveyardTargetTiles(List<Vector2Int> result)
+    {
+        if (result == null || chessBoard == null || ServerGameManager.Instance == null)
+            return;
+
+        BoardData previewBoard = BuildClientPreviewBoard(out _);
+        if (previewBoard == null)
+            return;
+
+        var slots = ServerGameManager.Instance.ReviveGraveyardSlots;
+        for (int i = 0; i < slots.Length; i++)
+        {
+            ReviveGraveyardEntry entry = slots[i];
+            if (!entry.isActive)
+                continue;
+
+            Vector2Int deathPos = entry.DeathPos;
+            if (!previewBoard.IsValidPosition(deathPos.x, deathPos.y))
+                continue;
+
+            if (!previewBoard.IsTileEmptyForMovement(deathPos.x, deathPos.y))
+                continue;
+
+            if (ServerBoardManager.Instance != null)
+            {
+                ChessPieceData pieceData = ServerBoardManager.Instance.GetPieceDataByIndex(entry.pieceDataIndex);
+                if (pieceData == null || !ServerGameManager.IsKingReviveCandidatePieceName(pieceData.pieceName))
+                    continue;
+            }
+
+            if (!result.Contains(deathPos))
+                result.Add(deathPos);
+        }
     }
 
     private void AddAllEmptyBoardTiles(List<Vector2Int> result)

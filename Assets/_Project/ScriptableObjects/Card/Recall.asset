@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Recall
   cardArtwork: {fileID: -4045150585266316378, guid: 7fd964c4461a0df488177bc9d9c1ed04, type: 3}
+  cardDescription: "Di chuy\u1EC3n 1 qu\xE2n tr\u1EDF l\u1EA1i \xF4 tr\u01B0\u1EDBc
+    \u0111\xF3."
   cardRole: 1
   effectType: 10
   requiredTargetName: 

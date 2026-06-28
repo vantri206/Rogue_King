@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Pawn Forward Attack
   cardArtwork: {fileID: -225260890239843338, guid: 69611030cc88f184bb52b0043d69a742, type: 3}
+  cardDescription: "Cho qu\xE2n t\u1ED1t kh\u1EA3 n\u0103ng \u0103n qu\xE2n th\u1EB3ng
+    ph\xEDa tr\u01B0\u1EDBc."
   cardRole: 1
   effectType: 9
   requiredTargetName: 

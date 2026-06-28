@@ -8,6 +8,10 @@ public class CardData : ScriptableObject
 
     public Sprite cardArtwork;
 
+    [TextArea(3, 8)]
+    [Tooltip("Mô tả đầy đủ hiển thị trong popup khi rê chuột lên card ở menu/play scene.")]
+    public string cardDescription;
+
     [Header("Card Role")]
     [Tooltip("RogueKing card chỉ được đưa vào deck/và sử dụng khi player đang cầm Rogue King. ChessAlliance card chỉ dùng khi player đang cầm phe Chess Alliance.")]
     public CardRoleType cardRole = CardRoleType.RogueKing;

@@ -69,6 +69,11 @@
         [SerializeField] private float kickAllPlayersAfterGameOverDelaySeconds = 5f;
 
         public List<DeadPieceRecord> graveyard = new List<DeadPieceRecord>();
+
+        [Header("Revive Graveyard Sync")]
+        [Tooltip("Các slot sync vị trí quân Pawn/Knight/Bishop đã chết để client highlight ô hồi sinh cho KingRevive.")]
+        [Networked, Capacity(64)] public NetworkArray<ReviveGraveyardEntry> ReviveGraveyardSlots { get; }
+
         public bool hasUsedPawnShieldThisTurn { get; set; } = false;
 
         private bool manualResolveInProgress;
@@ -88,6 +93,7 @@
                 phase1TurnCount = 0;
                 phase2TurnCount = 0;
                 currentPhase = GamePhase.Phase1;
+                ClearGraveyard();
                 matchResultRecorded = false;
                 matchResultAutoKickQueued = false;
                 ClearPhaseResultFields();
@@ -110,6 +116,7 @@
             ClearPhaseResultFields();
             ClearPhaseTransitionFields();
             ClearMatchResultFields();
+            ClearGraveyard();
             ClearPlayerWeaponCooldowns(p1);
             ClearPlayerWeaponCooldowns(p2);
             ClearTemporaryPlayerCardStates(p1);
@@ -516,7 +523,7 @@
             if (ServerBoardManager.Instance != null)
                 ServerBoardManager.Instance.ClearBoard();
 
-            graveyard.Clear();
+            ClearGraveyard();
             hasUsedPawnShieldThisTurn = false;
             ClearTemporaryPlayerCardStates(kingPlayer);
             ClearTemporaryPlayerCardStates(chessPlayer);
@@ -573,6 +580,7 @@
 
             currentPhase = GamePhase.Phase2;
             SwapRoles();
+            ClearGraveyard();
 
             ClearTemporaryPlayerCardStates(kingPlayer);
             ClearTemporaryPlayerCardStates(chessPlayer);
@@ -675,6 +683,90 @@
             phaseTransitionDurationNetworkSeconds = 0;
             phaseTransitionWinner = PlayerRef.None;
             phaseTransitionPhaseNumber = 0;
+        }
+
+        public void AddDeadPieceToGraveyard(ChessPieceData pieceData, ChessFaction faction, Vector2Int deathPos)
+        {
+            if (!HasStateAuthority || pieceData == null)
+                return;
+
+            graveyard.Add(new DeadPieceRecord
+            {
+                pieceData = pieceData,
+                faction = faction,
+                deathPos = deathPos
+            });
+
+            RebuildReviveGraveyardSlots();
+        }
+
+        public void RemoveDeadPieceRecord(DeadPieceRecord record)
+        {
+            if (!HasStateAuthority || record == null)
+                return;
+
+            graveyard.Remove(record);
+            RebuildReviveGraveyardSlots();
+        }
+
+        public void ClearGraveyard()
+        {
+            if (!HasStateAuthority)
+                return;
+
+            graveyard.Clear();
+            RebuildReviveGraveyardSlots();
+        }
+
+        public void RebuildReviveGraveyardSlots()
+        {
+            if (!HasStateAuthority)
+                return;
+
+            int capacity = ReviveGraveyardSlots.Length;
+            for (int i = 0; i < capacity; i++)
+                ReviveGraveyardSlots.Set(i, default);
+
+            if (graveyard == null || ServerBoardManager.Instance == null)
+                return;
+
+            int slot = 0;
+            for (int i = 0; i < graveyard.Count && slot < capacity; i++)
+            {
+                DeadPieceRecord record = graveyard[i];
+                if (!IsKingReviveCandidateRecord(record))
+                    continue;
+
+                int pieceDataIndex = ServerBoardManager.Instance.GetPieceDataIndex(record.pieceData);
+                if (pieceDataIndex < 0)
+                    continue;
+
+                ReviveGraveyardSlots.Set(slot, new ReviveGraveyardEntry
+                {
+                    isActive = true,
+                    pieceDataIndex = pieceDataIndex,
+                    faction = record.faction,
+                    deathX = record.deathPos.x,
+                    deathY = record.deathPos.y
+                });
+                slot++;
+            }
+        }
+
+        public static bool IsKingReviveCandidateRecord(DeadPieceRecord record)
+        {
+            if (record == null || record.pieceData == null)
+                return false;
+
+            return IsKingReviveCandidatePieceName(record.pieceData.pieceName);
+        }
+
+        public static bool IsKingReviveCandidatePieceName(string pieceName)
+        {
+            if (string.IsNullOrWhiteSpace(pieceName))
+                return false;
+
+            return pieceName.Contains("Pawn") || pieceName.Contains("Knight") || pieceName.Contains("Bishop");
         }
 
         private void RecordMatchResult(PlayerRef winner, PlayerRef loser, string reason)

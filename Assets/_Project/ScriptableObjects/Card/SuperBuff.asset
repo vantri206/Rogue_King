@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: Super Buff
   cardArtwork: {fileID: 7759559523558174242, guid: 0703d5fb5ddc2014f91a43cdef9f2977, type: 3}
+  cardDescription: "T\u0103ng g\u1EA5p \u0111\xF4i s\xE1t th\u01B0\u01A1ng cho vua
+    trong 3 l\u01B0\u1EE3t."
   cardRole: 0
   effectType: 6
   requiredTargetName: 

@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CardData
   cardName: King Sweep
   cardArtwork: {fileID: -2832088003302323534, guid: b3b16007e5d72774c8d81c08dc785c50, type: 3}
+  cardDescription: "Cho qu\xE2n vua +1 sweep"
   cardRole: 0
   effectType: 4
   requiredTargetName: King

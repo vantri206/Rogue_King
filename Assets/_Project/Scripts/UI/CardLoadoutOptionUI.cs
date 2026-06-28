@@ -38,12 +38,20 @@ public class CardLoadoutOptionUI : MonoBehaviour, IBeginDragHandler, IDragHandle
 
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>();
+
+        CardDescriptionTooltipTarget tooltip = GetComponent<CardDescriptionTooltipTarget>();
+        if (tooltip == null) tooltip = gameObject.AddComponent<CardDescriptionTooltipTarget>();
+        tooltip.SetCardData(cardData);
     }
 
     public void SetAvailable(bool available)
     {
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>();
+
+        CardDescriptionTooltipTarget tooltip = GetComponent<CardDescriptionTooltipTarget>();
+        if (tooltip == null) tooltip = gameObject.AddComponent<CardDescriptionTooltipTarget>();
+        tooltip.SetCardData(cardData);
 
         if (canvasGroup != null)
         {
@@ -68,6 +76,10 @@ public class CardLoadoutOptionUI : MonoBehaviour, IBeginDragHandler, IDragHandle
 
         if (canvasGroup == null)
             canvasGroup = GetComponent<CanvasGroup>();
+
+        CardDescriptionTooltipTarget tooltip = GetComponent<CardDescriptionTooltipTarget>();
+        if (tooltip == null) tooltip = gameObject.AddComponent<CardDescriptionTooltipTarget>();
+        tooltip.SetCardData(cardData);
 
         if (canvasGroup != null)
             canvasGroup.blocksRaycasts = false;
